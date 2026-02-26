@@ -70,6 +70,10 @@ This skill performs the following security checks (each with detailed guidance i
 19. **HTTP Verb Whitelisting** - Ensures only necessary HTTP verbs are allowed, blocks unused methods
     - *See: references/http_verb_whitelisting.md*
 
+20. **SSL/TLS Configuration** - Validates SSL/TLS protocol versions and cipher suites using SSL Labs analysis
+    - *See: references/ssl_tls_configuration.md*
+    - **Note**: Requires production URL from user to perform SSL Labs scan
+
 Each check provides:
 - Specific patterns to search for
 - RED FLAGS to identify

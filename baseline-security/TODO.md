@@ -1,4 +1,3 @@
-- Use ssl labs to check tls version and cipher suite support for your public-facing applications. Ensure that only TLS 1.2 and TLS 1.3 are supported, and that weak ciphers (e.g., RC4, DES) are disabled.
 - database encryption settings
 - sonarqube security findings
 - authnetication
