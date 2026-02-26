@@ -72,7 +72,7 @@ This skill performs the following security checks (each with detailed guidance i
 
 20. **SSL/TLS Configuration** - Validates SSL/TLS protocol versions and cipher suites using SSL Labs analysis
     - *See: references/ssl_tls_configuration.md*
-    - **Note**: Requires production URL from user to perform SSL Labs scan
+    - **Note**: Requires production URL. Ask the user for the URL at the start of the audit and store it as `PRODUCTION_URL` for this check.
 
 Each check provides:
 - Specific patterns to search for
@@ -87,3 +87,58 @@ Invoke this skill by asking for a security audit:
 - "Perform a baseline security audit"
 - "Check the codebase for security issues"
 - "Run security checks on this project"
+
+## Jira Integration
+
+### Step 1 — Collect the Jira Project Code (ask once, at the very start)
+
+Before running any checks, ask the user exactly once:
+
+> "What is the Jira project code where security stories should be created? (e.g. `SEC`, `PROJ`)"
+
+Store the answer as `JIRA_PROJECT_CODE` and reuse it for all subsequent story creation calls.
+Do **not** ask again during the audit.
+
+### Step 2 — Severity Normalization
+
+Reference files use two different severity scales. Normalize all findings to a single Jira priority:
+
+| Finding Severity (in reference output)     | Jira Priority |
+|--------------------------------------------|---------------|
+| 🔴 Critical / Critical                     | `Highest`     |
+| 🟡 High / High / High Priority             | `High`        |
+| 🟢 Medium / Medium / Medium Priority       | `Medium`      |
+| 🔵 Low / Low / Low Priority                | `Low`         |
+
+When a reference file uses `✅ SECURE / ⚠️ PARTIALLY SECURE / ❌ INSECURE` status markers,
+map them as: `⚠️ PARTIALLY SECURE` → `Medium`, `❌ INSECURE` → `High`.
+
+### Step 3 — Create a Jira Story for Each Finding
+
+After completing **each individual check**, create one Jira story per finding using the
+`create_issue` tool with the following fields:
+
+| Field         | Value                                                                                  |
+|---------------|----------------------------------------------------------------------------------------|
+| `project`     | `JIRA_PROJECT_CODE` (collected above)                                                  |
+| `issuetype`   | `Story`                                                                                |
+| `summary`     | `[Security Audit] <Check Name>: <short finding title>`                                 |
+| `description` | Finding location (file + line number), description of the issue, remediation steps     |
+| `labels`      | `BaselineSecurity`                                                                     |
+| `priority`    | Mapped from the normalization table above                                              |
+
+**Example summary:** `[Security Audit] Secrets Management: Hardcoded API key in appsettings.json`
+
+After each `create_issue` call succeeds, echo the created story key inline in the audit output,
+for example: *(→ created [PROJ-42](https://enigmatry.atlassian.net/browse/PROJ-42))*
+
+### Step 4 — Final Summary Table
+
+After all 20 checks are complete, output a consolidated table of all created stories:
+
+| Story Key | Check | Summary | Priority |
+|-----------|-------|---------|----------|
+| PROJ-42   | Secrets Management | Hardcoded API key in appsettings.json | High |
+| ...       | ...   | ...     | ...      |
+
+If no findings were produced for a check, skip story creation for that check silently.
