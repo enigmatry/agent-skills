@@ -88,11 +88,47 @@ Invoke this skill by asking for a security audit:
 - "Check the codebase for security issues"
 - "Run security checks on this project"
 
+## Execution Flow
+
+### Step 0 — Select Checks to Run (ask once, at the very start)
+
+Before doing anything else, present the full list of available checks and ask the user which ones to run:
+
+> "Which security checks would you like to run?
+>
+> | # | Check |
+> |---|-------|
+> | 1 | Secrets Management |
+> | 2 | Package Security |
+> | 3 | SQL Injection |
+> | 4 | Exception Handling |
+> | 5 | Logging Security |
+> | 6 | Sensitive Data in Logs |
+> | 7 | Sensitive Query Strings |
+> | 8 | IDOR (Insecure Direct Object References) |
+> | 9 | Output Encoding |
+> | 10 | Input Validation |
+> | 11 | Code Minification |
+> | 12 | Environment Credentials |
+> | 13 | Data Minimization |
+> | 14 | Data Storage Minimization |
+> | 15 | Cookie and Storage Security |
+> | 16 | Cryptography Security |
+> | 17 | Security Headers |
+> | 18 | Version Info Headers |
+> | 19 | HTTP Verb Whitelisting |
+> | 20 | SSL/TLS Configuration |
+>
+> Reply with **`all`** to run all checks, or provide a comma-separated list of numbers (e.g. `1, 3, 5`) to run a specific subset."
+
+Store the selected check numbers as `SELECTED_CHECKS`. Only run, report on, and create Jira stories for the selected checks.
+Do **not** ask again during the audit.
+
 ## Jira Integration
 
 ### Step 1 — Collect the Jira Project Code (ask once, at the very start)
 
-Before running any checks, ask the user exactly once:
+After confirming the selected checks, ask the user exactly once:
 
 > "What is the Jira project code where security stories should be created? (e.g. `SEC`, `PROJ`)"
 
@@ -134,7 +170,7 @@ for example: *(→ created [PROJ-42](https://enigmatry.atlassian.net/browse/PROJ
 
 ### Step 4 — Final Summary Table
 
-After all 20 checks are complete, output a consolidated table of all created stories:
+After all selected checks are complete, output a consolidated table of all created stories:
 
 | Story Key | Check | Summary | Priority |
 |-----------|-------|---------|----------|
