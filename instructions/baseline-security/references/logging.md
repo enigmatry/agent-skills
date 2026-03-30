@@ -1,13 +1,19 @@
-Please perform a comprehensive analysis of the codebase to verify the following logging requirements are properly implemented:
+# Logging Security Analysis
 
-### 1. Unhandled Exception Logging with Stack Traces
-**Requirement**: All unhandled exceptions must be captured and logged with complete stack traces using ASP.NET middleware or a global exception handler.
+Analyze the codebase to verify that logging practices meet security requirements: unhandled exceptions are captured with full stack traces, console output is gated behind a debug flag, and security-relevant events are written to a dedicated audit log.
+
+## Core Security Principle
+**Logging must ensure all errors are captured for debugging while keeping sensitive details out of user-facing responses. Security events must be auditable and separated from general application logs.**
+
+## 1. Unhandled Exception Logging
+
+Verify that all unhandled exceptions are captured and logged with complete stack traces.
 
 **Check for:**
-- Global exception handling middleware (e.g., `UseExceptionHandler`, custom middleware)
-- Exception filter attributes (e.g., `ExceptionFilterAttribute` implementations)
-- Proper registration in startup/program configuration
-- Stack trace inclusion in exception logging
+- Global exception handling middleware (`UseExceptionHandler`, custom middleware)
+- Exception filter attributes (`ExceptionFilterAttribute` implementations)
+- Proper registration in `Startup.cs` or `Program.cs`
+- `logger.LogError(exception, message)` calls that include the exception object
 - Coverage for both API controllers and general application exceptions
 
 **Search patterns:**
@@ -16,61 +22,53 @@ Please perform a comprehensive analysis of the codebase to verify the following 
 - `logger.LogError` with exception parameters
 - Middleware registration in `Configure` or `Program.cs`
 
-### 2. Console Application Logging with Debug Level
-**Requirement**: Application logs should only be written to the console when the Debug level flag is set.
+## 2. Console Logging Configuration
+
+Verify that application logs are only written to the console when the Debug log level is active.
 
 **Check for:**
 - Console logging sink configuration in appsettings files
-- Debug log level configuration for console output specifically
-- Separation between console and file logging configurations
-- Environment-specific settings (Development vs Production)
-- Proper Serilog or built-in logging provider configuration
+- Minimum log level set appropriately for console output
+- Separation between console and file or structured logging configurations
+- Environment-specific settings (Development vs. Production)
+- Serilog or built-in logging provider configuration
 
 **Search patterns:**
-- `Console` in logging configuration (appsettings.json, appsettings.Development.json)
+- `Console` in logging configuration (`appsettings.json`, `appsettings.Development.json`)
 - `"WriteTo"` with Console sink
 - `"MinimumLevel"` settings for console logging
 - `AddConsole()` method calls
-- Environment-specific console logging setup
 
-### 3. Separate Auditing Logs for Security Events
-**Requirement**: All auditing events must be logged to a separate log file/provider, including:
+## 3. Audit Log Separation
+
+Verify that security-relevant events are written to a dedicated audit log, separate from general application logs. Events to cover:
 - Logon attempts (successful and failed)
 - Sign-out events
 - Email address changes
 - Role changes
-- Organization/tenant changes
+- Organisation or tenant changes
 - Permission modifications
 
 **Check for:**
 - Separate audit log file or logging provider configuration
-- Dedicated audit logger instances or categories
-- Authentication event logging (OnAuthenticationFailed, OnTokenValidated, etc.)
+- Dedicated audit logger instances or named categories
+- Authentication event logging (`OnAuthenticationFailed`, `OnTokenValidated`, etc.)
 - User modification event logging
-- Role/permission change logging
-- Proper separation from application logs using filters or separate loggers
+- Role and permission change logging
+- Filter expressions routing audit events away from the application log
 
 **Search patterns:**
-- Separate log file paths containing "audit"
+- Separate log file paths containing `audit`
 - Authentication event handlers: `OnAuthenticationFailed`, `OnSignIn`, `OnSignOut`
-- User change events: email changes, role assignments, organization updates
+- User change events: email changes, role assignments, organisation updates
 - Domain events or audit event handlers
-- Filter expressions separating audit logs from application logs
 - Dedicated audit logging categories or contexts
 
-### Analysis Approach:
-1. **Configuration Analysis**: Examine appsettings.json files for logging configuration
-2. **Middleware Analysis**: Check Program.cs/Startup.cs for exception handling middleware
-3. **Event Handler Analysis**: Look for authentication and user change event handlers
-4. **Domain Event Analysis**: Check for audit-related domain events and their handlers
-5. **Logging Pattern Analysis**: Search for actual logging statements in critical areas
+## What to Report
 
-### Expected Deliverables:
-For each requirement, provide:
+For each of the three requirements above, provide:
 - ✅ **IMPLEMENTED** / ⚠️ **PARTIALLY IMPLEMENTED** / ❌ **NOT IMPLEMENTED**
-- Specific file locations and line numbers where implementations are found
-- Any gaps or missing components
-- Security risks if requirements are not met
+- Specific file locations and line numbers where implementations are found (or absent)
+- Gaps or missing components
+- Security risks if the requirement is not met
 - Concrete recommendations for implementation or improvement
-
-Please analyze the codebase systematically and provide a detailed report on compliance with these logging requirements.

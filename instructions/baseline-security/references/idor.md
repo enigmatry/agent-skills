@@ -1,59 +1,74 @@
-Please scan my codebase for Insecure Direct Object References (IDOR) vulnerabilities. Check for:
+# IDOR (Insecure Direct Object References) Analysis
 
-**1. Direct ID Usage in API Endpoints**
-- Route parameters that directly access resources by ID without authorization checks
-- Path parameters like `/api/users/{userId}` or `/documents/{documentId}`
+Scan the codebase for Insecure Direct Object Reference vulnerabilities where API endpoints or data-access operations accept resource identifiers from the caller without verifying the caller is authorized to access that specific resource.
+
+## Core Security Principle
+**Every request that accesses a resource by ID must verify that the authenticated user is authorized to access that specific resource. Authentication (confirming who you are) is not the same as authorization (confirming what you may access).**
+
+## 1. Direct ID Usage in API Endpoints
+
+Identify endpoints where resource IDs come from the caller:
+- Route parameters that access resources by ID (e.g. `/api/users/{userId}`, `/documents/{documentId}`)
 - Query parameters that reference object IDs directly
 - RESTful endpoints that expose internal database IDs
+- Bulk endpoints accepting lists of IDs from the caller
 
-**2. Missing Authorization Checks**
-- Controllers/endpoints that don't verify user ownership of requested resources
-- Methods that fetch objects by ID without checking user permissions
-- Database queries using user-supplied IDs without access control validation
-- File access operations using user-provided file paths or IDs
+## 2. Missing Authorization Checks
 
-**3. Vulnerable Patterns**
-- Repository methods like `GetById(id)` called without prior authorization
-- Direct database queries: `context.Users.Find(userId)` without ownership validation
-- File operations: `File.ReadAllText(filePath)` with user-controlled paths
-- URL generation that exposes internal object references
+Look for data access without ownership or permission validation:
+- Controllers that fetch objects by ID without checking user ownership
+- Database queries using caller-supplied IDs without access control validation
+- Repository methods like `GetById(id)` called without a prior ownership check
+- File access operations using caller-provided paths or IDs
 
-**4. Authentication vs Authorization Gaps**
-- Endpoints that check if user is authenticated but not if they own the resource
-- Role-based checks that don't include resource-specific permissions
-- JWT/session validation without object-level access control
-- Admin endpoints that don't validate admin scope for specific resources
+## 3. Vulnerable Code Patterns
 
-**5. Data Exposure Risks**
-- API responses that return data belonging to other users
-- Bulk operations that don't filter by user ownership
-- Search/listing endpoints that show unauthorized data
-- Error messages that leak information about unauthorized resources
+Flag these patterns for closer review:
+```csharp
+// Direct lookup without ownership check
+var document = await context.Documents.FindAsync(documentId);
 
-**6. Framework-Specific Checks**
-- ASP.NET Core: Missing `[Authorize]` attributes or custom authorization filters
-- Entity Framework: Direct context access without user filtering
-- Repository patterns: Generic repositories without built-in access control
-- Service layer: Business logic that doesn't validate resource ownership
+// File access with user-controlled path
+var content = File.ReadAllText(filePath);
 
-**7. Common Vulnerable Scenarios**
-- User profile access: `/users/{id}` without ownership check
-- Document/file access: `/documents/{id}` without permission validation
-- Order/transaction access: `/orders/{id}` accessible by any authenticated user
-- Admin functions: `/admin/users/{id}` without proper role validation
-- API keys/secrets: `/api-keys/{id}` without user ownership verification
+// Bulk query without user-scoped filter
+return await context.Orders.Where(o => ids.Contains(o.Id)).ToListAsync();
+```
 
-**8. Input Sources to Examine**
-- URL route parameters and query strings
-- Form data and request bodies containing object IDs
-- Hidden form fields with resource identifiers
-- AJAX requests with embedded object references
-- Mobile API calls with direct ID parameters
+## 4. Authentication vs. Authorization Gaps
 
-Please provide:
-- Specific file locations and line numbers of vulnerable code
-- Risk level assessment (Critical/High/Medium/Low)
-- Examples of potentially exploitable endpoints
-- Recommended authorization patterns and fixes
-- Framework-specific security recommendations
-- Code examples showing proper access control implementation
+- Endpoints that verify the user is authenticated but not that they own the resource
+- Role-based checks that do not include resource-level ownership verification
+- JWT or session validation without object-level access control
+- Admin endpoints that fail to scope resources to the admin's tenant or domain
+
+## 5. Data Exposure Risks
+
+- API responses returning data belonging to other users
+- Bulk or listing operations without user-based filtering
+- Search endpoints returning records the caller is not authorized to see
+- Error messages that reveal information about resources the caller cannot access
+
+## 6. Framework-Specific Checks
+
+- **ASP.NET Core**: Missing `[Authorize]` attributes or resource-based authorization policies
+- **Entity Framework**: Direct `context` access without a user-scoped filter
+- **Repository patterns**: Generic repositories lacking built-in ownership enforcement
+- **Service layer**: Business logic that does not validate resource ownership before returning data
+
+## 7. Common Vulnerable Scenarios
+
+- User profile: `/users/{id}` without confirming the `id` matches the authenticated user
+- Documents: `/documents/{id}` without verifying the user has permission
+- Orders: `/orders/{id}` accessible by any authenticated user, not just the owner
+- Admin functions: `/admin/users/{id}` without tenant-scoped role validation
+- API keys: `/api-keys/{id}` without confirming the key belongs to the caller
+
+## What to Report
+
+For each finding, provide:
+- **File** and line number
+- **Endpoint or method** where the unchecked access occurs
+- **ID parameter** used (route, query string, or body)
+- **Risk**: HIGH (user data accessible without any ownership check) / MEDIUM (partial checks present with gaps) / LOW (admin-only endpoint with incomplete scope validation)
+- **Recommendation**: resource-based authorization check or ownership filter to apply

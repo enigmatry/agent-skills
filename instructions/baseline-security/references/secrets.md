@@ -154,117 +154,12 @@ web.config, app.config
 *.csproj, *.props, Dockerfile
 ```
 
-## 8. Secret Detection Tools and Automation
+## What to Report
 
-**Implement automated secret detection:**
-- Git hooks for pre-commit secret scanning
-- CI/CD pipeline secret detection
-- Static code analysis for credential patterns
-- Regular expression validation in builds
+For each finding, provide:
+- **File** and line number
+- **Secret type**: API key, password, connection string, certificate, etc.
+- **Code snippet** showing the hardcoded or exposed value (redact actual secret in report)
+- **Risk**: HIGH (production credentials, encryption keys, payment API keys) / MEDIUM (non-production credentials, internal service tokens) / LOW (placeholder or example values that may be real)
+- **Recommendation**: move to a secure configuration store (Azure Key Vault, environment variables, user secrets) and rotate any exposed credentials immediately
 
-**Recommended tools:**
-- GitHub Secret Scanning
-- Azure DevOps Credential Scanner
-- SonarQube security rules
-- Custom regex-based scanners
-
-## 9. Remediation Strategies
-
-**High Priority (Fix Immediately):**
-- Remove any hardcoded passwords, API keys, or connection strings
-- Move secrets to secure configuration stores (Key Vault, environment variables)
-- Rotate any exposed credentials immediately
-- Add git history cleaning if secrets were committed
-
-**Medium Priority (Plan Implementation):**
-- Implement proper secret management infrastructure
-- Set up automated secret scanning in CI/CD
-- Create secure configuration deployment processes
-- Establish secret rotation procedures
-
-**Low Priority (Improve Security Posture):**
-- Enhance developer training on secret management
-- Implement secret detection in IDEs
-- Regular security audits of configuration management
-- Documentation of secure development practices
-
-## Expected Deliverables
-
-1. **Secret Inventory** - Complete list of all identified secrets and their locations
-2. **Risk Assessment** - Categorization of secrets by exposure risk and sensitivity
-3. **Remediation Plan** - Prioritized actions to secure identified credentials
-4. **Configuration Security Report** - Analysis of current secret management practices
-5. **Implementation Guide** - Step-by-step instructions for proper secret management
-
-## Implementation Recommendations
-
-**Backend (C#/.NET):**
-```csharp
-// Use configuration providers
-public void ConfigureServices(IServiceCollection services)
-{
-    // Azure Key Vault
-    services.AddAzureKeyVault(configuration);
-    
-    // User Secrets (development only)
-    if (env.IsDevelopment())
-    {
-        configuration.AddUserSecrets<Program>();
-    }
-    
-    // Environment variables
-    configuration.AddEnvironmentVariables();
-}
-
-// Access secrets securely
-var connectionString = _configuration.GetConnectionString("Database");
-var apiKey = _configuration["ExternalServices:PaymentGateway:ApiKey"];
-```
-
-**Configuration Management:**
-```json
-// appsettings.json (NO SECRETS)
-{
-  "ExternalServices": {
-    "PaymentGateway": {
-      "BaseUrl": "https://api.payment-service.com",
-      "ApiKey": "", // Retrieved from Key Vault
-      "TimeoutSeconds": 30
-    }
-  },
-  "ConnectionStrings": {
-    "Database": "" // Retrieved from environment variables
-  }
-}
-
-// Environment Variables or Key Vault
-CONNECTIONSTRINGS__DATABASE=Server=prod;Database=app;Integrated Security=true
-EXTERNALSERVICES__PAYMENTGATEWAY__APIKEY=sk-live-key-from-vault
-```
-
-**Docker and Deployment:**
-```dockerfile
-# Dockerfile - NO SECRETS
-ENV ASPNETCORE_ENVIRONMENT=Production
-# Secrets injected at runtime via orchestration
-
-# docker-compose.yml - Use secrets management
-version: '3.8'
-services:
-  web:
-    environment:
-      - ConnectionStrings__Database=${DATABASE_CONNECTION}
-    secrets:
-      - api_key
-secrets:
-  api_key:
-    external: true
-```
-
-## Success Criteria
-- Zero hardcoded secrets in source code
-- All sensitive configuration externalized to secure stores
-- Automated secret detection in CI/CD pipeline
-- Clear secret management procedures documented
-- Regular secret rotation processes established
-- No sensitive data in version control history

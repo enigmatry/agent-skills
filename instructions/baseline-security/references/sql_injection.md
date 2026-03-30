@@ -1,50 +1,69 @@
-Please scan my codebase for potential SQL injection vulnerabilities. Check for:
+# SQL Injection Analysis
 
-**1. Dynamic SQL Construction**
-- String interpolation in SQL queries ($"SELECT * FROM Users WHERE Id = '{userId}'")
-- String concatenation with user input ("SELECT * FROM " + tableName)
-- StringBuilder used to build SQL with user data
-- String.Format() with SQL and user parameters
+Scan the codebase for SQL injection vulnerabilities where user input is incorporated into SQL queries without proper parameterization or escaping.
 
-**2. Raw SQL Execution**
-- ExecuteSqlRaw() or ExecuteSqlInterpolated() calls
-- FromSqlRaw() or FromSqlInterpolated() usage
-- CommandText assignments with dynamic content
-- Database.SqlQuery() or similar raw SQL methods
+## Core Security Principle
+**All database queries must use parameterized queries or prepared statements. User input must never be concatenated or interpolated directly into SQL strings.**
 
-**3. Stored Procedure Calls**
+## 1. Dynamic SQL Construction
+
+Search for string interpolation, concatenation, or formatting used to build SQL queries:
+- String interpolation in SQL queries (e.g. `$"SELECT * FROM Users WHERE Id = '{userId}'"`)
+- String concatenation with user input (e.g. `"SELECT * FROM " + tableName`)
+- `StringBuilder` used to build SQL with user-supplied data
+- `String.Format()` with SQL and user parameters
+
+## 2. Raw SQL Execution
+
+Look for raw SQL execution methods that may receive dynamic input:
+- `ExecuteSqlRaw()` or `ExecuteSqlInterpolated()` calls
+- `FromSqlRaw()` or `FromSqlInterpolated()` usage
+- `CommandText` assignments with dynamic content
+- `Database.SqlQuery()` or similar raw SQL methods
+
+## 3. Stored Procedure Calls
+
+Check for unsafe stored procedure invocation:
 - Dynamic stored procedure name construction
 - Parameter values built through string manipulation
-- CommandType.StoredProcedure with concatenated names
+- `CommandType.StoredProcedure` with concatenated names
 
-**4. ORM Vulnerabilities**
-- Raw SQL in Entity Framework queries
-- Dynamic LINQ expressions built from strings
-- Unsafe Where() clauses with string operations
-- HQL/native SQL in Hibernate (if applicable)
+## 4. ORM Vulnerabilities
 
-**5. Input Sources to Validate**
-- User input from forms, APIs, query strings
-- URL parameters used in queries
-- File uploads that generate SQL
-- Configuration values that might be tampered
+Check for unsafe raw queries within ORMs:
+- Raw SQL passed to Entity Framework methods
+- Dynamic LINQ expressions built from user-supplied strings
+- Unsafe `Where()` clauses with string operations
+- HQL or native SQL queries (if applicable)
 
-**6. Common Patterns to Flag**
-- Any SQL keyword (SELECT, INSERT, UPDATE, DELETE) followed by string operations
-- WHERE clauses built dynamically
-- ORDER BY with dynamic column names
-- Table/column names from user input
-- LIKE patterns with unescaped wildcards
+## 5. Input Sources to Validate
 
-**7. Framework-Specific Checks**
-- Check if parameterized queries are used consistently
-- Verify proper escaping mechanisms are in place
-- Look for bypass of built-in protections
-- Examine custom SQL builders or ORMs
+Identify all user-controlled input flowing into queries:
+- Form fields, API request bodies, and query string parameters
+- URL route parameters used in queries
+- File-upload metadata that feeds into SQL
+- Configuration values that might be tampered with
 
-Please provide:
-- Specific file locations and line numbers
-- Risk level assessment (High/Medium/Low)
-- Code examples of vulnerabilities found
-- Recommended fixes with secure code alternatives
-- Overall security assessment and best practices
+## 6. Common Patterns to Flag
+
+- Any SQL keyword (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) followed by string operations
+- `WHERE` clauses built dynamically at runtime
+- `ORDER BY` with a dynamic column name from user input
+- Table or column names sourced from user input
+- `LIKE` patterns using unescaped wildcards from user input
+
+## 7. Framework-Specific Checks
+
+- Confirm parameterized queries or `IDbCommand` parameters are used consistently
+- Verify proper escaping mechanisms are in place where raw SQL is unavoidable
+- Look for bypasses of built-in ORM query protections
+- Examine custom SQL builders or query helper utilities
+
+## What to Report
+
+For each finding, provide:
+- **File** and line number
+- **Code snippet** showing the vulnerable query construction
+- **Input source**: where the user-controlled value originates
+- **Risk**: HIGH (direct user input in query) / MEDIUM (indirect or partially controlled input) / LOW (admin-only or configuration-controlled input)
+- **Recommendation** with a secure parameterized alternative

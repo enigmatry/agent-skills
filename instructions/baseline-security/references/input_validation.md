@@ -167,7 +167,7 @@ CustomValidators
 - Card type detection
 - Expiration date validation
 
-## 5. Specific Validation Vulnerabilities
+## 4. Specific Validation Vulnerabilities
 
 **Mass Assignment Protection:**
 ```csharp
@@ -208,7 +208,7 @@ public string Name { get; set; }
 [RegularExpression(@"^[a-zA-Z0-9]{3,20}$")] // SAFE - simple pattern
 ```
 
-## 6. Framework-Specific Validation Checks
+## 5. Framework-Specific Validation Checks
 
 **ASP.NET Core Minimal APIs:**
 ```csharp
@@ -235,7 +235,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
-## 7. What to Report
+## 6. What to Report
 
 **Report ALL instances of (MEDIUM PRIORITY):**
 - API endpoints accepting user input without validation
@@ -262,7 +262,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - **MEDIUM**: Missing server-side validation on general user inputs
 - **LOW**: Missing client-side validation only (server-side exists)
 
-## 8. Validation Best Practices
+## 7. Validation Best Practices
 
 **Verify that the application:**
 - Validates ALL user input server-side (never trust client)
@@ -296,7 +296,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 4. Database constraints (last line of defense)
 ```
 
-## 9. Search Patterns
+## 8. Search Patterns
 
 **Look for these patterns indicating potential missing validation:**
 
@@ -326,7 +326,7 @@ HttpContext.Request
 - API endpoints in minimal APIs: `Program.cs`, `*Endpoints.cs`
 - Client-side forms: `*.component.ts`, `*.component.html`, `*.tsx`, `*.jsx`
 
-## 10. Additional Considerations
+## 9. Additional Considerations
 
 **Business Logic Validation:**
 - Check for business rule validation beyond basic format checks
@@ -345,3 +345,4 @@ HttpContext.Request
 - Support various date/number formats
 - Handle different character encodings
 - Validate locale-specific formats (phone, postal codes)
+

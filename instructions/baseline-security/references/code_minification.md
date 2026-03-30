@@ -44,7 +44,7 @@ Analyze the codebase to identify missing minification/uglification configuration
 - `.angular-cli.json` - Legacy Angular CLI projects
 - Build scripts in `package.json`
 
-## 4. CSS/SCSS Minification
+## 2. CSS/SCSS Minification
 
 **CSS preprocessor configurations:**
 
@@ -105,7 +105,7 @@ module.exports = {
 }
 ```
 
-## 5. Third-Party JavaScript and CSS Files
+## 3. Third-Party JavaScript and CSS Files
 
 **Critical checks for third-party resources:**
 
@@ -154,7 +154,7 @@ module.exports = {
 - `public/` folder - Static third-party files
 - Build output directory - Verify files are minified
 
-## 6. Build Script Verification
+## 4. Build Script Verification
 
 **Check package.json build scripts:**
 
@@ -177,7 +177,7 @@ module.exports = {
 - Missing or incorrect build configurations
 - Build scripts that explicitly disable minification
 
-## 7. Server-Side Rendering (SSR) and Static Site Generation (SSG)
+## 5. Server-Side Rendering (SSR) and Static Site Generation (SSG)
 
 **Next.js:**
 - Verify production builds use optimized output
@@ -200,14 +200,14 @@ export default {
 - Verify both browser and server bundles are optimized
 - Check `angular.json` for SSR build configurations
 
-## 8. HTML Minification
+## 6. HTML Minification
 
 **Check for HTML minification in build process:**
 
 **Angular:**
 - HTML minification is included in `optimization: true`
 
-## 9. Source Maps in Production
+## 7. Source Maps in Production
 
 **Critical security check - source maps expose source code:**
 
@@ -241,7 +241,7 @@ export default defineConfig({
 - Do NOT serve source maps publicly
 - Store source maps securely on the server only
 
-## 10. What to Report
+## 8. What to Report
 
 **Report ALL instances of (LOW PRIORITY):**
 - Missing or disabled minification in production builds
@@ -267,7 +267,7 @@ export default defineConfig({
 - **LOW**: Missing minification (reduces security through obscurity)
 - **INFO**: Suboptimal configuration (performance impact)
 
-## 11. Files and Directories to Check
+## 9. Files and Directories to Check
 
 **Configuration files:**
 - `angular.json` - Angular projects
@@ -287,7 +287,7 @@ export default defineConfig({
 - `out/` - Next.js static export
 - `public/` - Static files (check for unminified third-party files)
 
-## 12. Verification Steps
+## 10. Verification Steps
 
 **Manual verification of production build:**
 
@@ -312,7 +312,7 @@ export default defineConfig({
    - Check if using `.min.js` versions
    - Verify third-party code is included in bundle optimization
 
-## 13. Best Practices
+## 11. Best Practices
 
 **Verify that the application:**
 - Has separate development and production build configurations
@@ -343,7 +343,7 @@ export default defineConfig({
 - Keep sensitive logic and secrets on the server side
 - Use minification as one layer of defense-in-depth
 
-## 14. Common Misconfigurations
+## 12. Common Misconfigurations
 
 **Watch out for:**
 
@@ -378,3 +378,4 @@ devtool: false
   }
 }
 ```
+

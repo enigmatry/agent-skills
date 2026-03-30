@@ -1,3 +1,5 @@
+# Exception Handling Security Analysis
+
 Analyze the codebase for secure exception handling that logs complete error details while protecting users from sensitive information exposure:
 
 ### Core Security Requirement:
@@ -61,4 +63,3 @@ For each area, provide:
 4. Is environment-specific error handling correctly implemented?
 
 Focus on preventing information disclosure while ensuring comprehensive logging for debugging.
-```

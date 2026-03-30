@@ -1,80 +1,80 @@
-Please scan my codebase for sensitive data being logged inappropriately. Check for:
+# Sensitive Data in Logs Analysis
 
-**1. Authentication & Credential Logging**
-- Passwords, PINs, or security codes in log statements
-- API keys, tokens, or secrets being logged
-- Session IDs, authentication tokens, or bearer tokens in logs
-- JWT tokens, OAuth tokens, or refresh tokens being logged
-- Database credentials, connection strings, or certificates in logs
+Scan the codebase for sensitive data being written to logs, which could expose credentials, PII, or other confidential information through log files and aggregation systems.
 
-**2. Personal Identifiable Information (PII) Logging**
+## Core Security Principle
+**Sensitive data — including credentials, tokens, PII, and financial information — must never appear in log output. Log statements must record what happened without recording the sensitive values involved.**
+
+## 1. Authentication and Credential Logging
+
+Search for log statements that may capture:
+- Passwords, PINs, or security codes
+- API keys, tokens, or secrets
+- Session IDs, authentication tokens, or bearer tokens
+- JWT tokens, OAuth tokens, or refresh tokens
+- Database credentials, connection strings, or certificates
+
+## 2. Personal Identifiable Information (PII) Logging
+
+Search for log statements that may capture:
 - Social Security Numbers, tax IDs, or national identifiers
 - Credit card numbers, bank account details, or payment information
 - Email addresses, phone numbers, or personal contact details
-- Names, addresses, or demographic data in logs
+- Names, addresses, or demographic data
 - Medical records, health information, or biometric data
 
-**3. Business Sensitive Data Logging**
+## 3. Business Sensitive Data Logging
+
+Search for log statements that may capture:
 - Customer data, orders, or transaction details
-- Proprietary algorithms, business logic, or trade secrets
-- Internal system configurations, server details, or infrastructure info
-- Pricing information, financial data, or revenue details
-- User behavior patterns, analytics data, or usage statistics
+- Proprietary business logic or trade secrets
+- Internal system configurations or infrastructure details
+- Pricing information or financial data
+- Usage statistics or behavioural analytics
 
-**4. Common Logging Vulnerabilities**
+## 4. Common Logging Vulnerabilities
+
 - Full object serialization including sensitive properties
-- Exception logging that exposes sensitive stack traces
+- Exception logging that exposes sensitive stack traces or database internals
 - Request/response logging containing sensitive headers or bodies
-- Debug logging left enabled in production environments
-- Structured logging with sensitive data in log context
+- Debug logging left enabled in production
+- Structured logging with sensitive data in log context or scope
 
-**5. Framework-Specific Checks**
-- ASP.NET Core: Request logging middleware exposing sensitive data
-- Serilog/NLog: Structured logging with sensitive properties
-- Entity Framework: SQL query logging with sensitive parameters
-- HTTP client logging: Authorization headers or request bodies
-- Custom loggers: Application-specific logging implementations
+## 5. Framework-Specific Checks
 
-**6. Logging Configuration Issues**
-- Log levels set too verbose in production (Debug, Trace)
-- Sensitive data not marked with [SkipLogging] or similar attributes
+- **ASP.NET Core**: Request logging middleware exposing sensitive parameters
+- **Serilog/NLog**: Structured logging with sensitive properties in log context
+- **Entity Framework**: SQL query logging with sensitive parameter values
+- **HTTP client logging**: Authorization headers or request bodies
+- **Custom loggers**: Application-specific logging implementations
+
+## 6. Logging Configuration Issues
+
+- Log levels set too verbose in production (`Debug`, `Trace`)
+- Sensitive data not excluded via `[SkipLogging]` or destructuring policies
 - Global exception handlers logging full exception details
-- Application Insights or monitoring tools capturing sensitive data
-- Log files stored in insecure locations or with weak permissions
+- Application Insights or APM tools capturing sensitive request data
+- Log files stored in insecure locations
 
-**7. Data Masking & Redaction Gaps**
-- Lack of data masking for sensitive fields
+## 7. Data Masking and Redaction Gaps
+
+- No masking for sensitive fields before logging
 - Inconsistent redaction patterns across the application
-- Sensitive data visible in plain text in log outputs
+- Sensitive data in plain text in log outputs
 - Missing sanitization before logging user inputs
-- No differentiation between sensitive and non-sensitive data logging
 
-**8. Compliance & Regulatory Concerns**
+## 8. Compliance and Regulatory Concerns
+
 - GDPR violations through excessive personal data logging
 - PCI DSS violations with payment card data in logs
-- HIPAA violations with health information logging
-- Financial regulations breached through transaction logging
-- Industry-specific compliance requirements not met
+- HIPAA violations with health information in logs
+- Financial regulation requirements not met through transaction logging
 
-**9. Log Storage & Transmission Security**
-- Logs transmitted over unencrypted channels
-- Log aggregation systems without proper access controls
-- Cloud logging services with inadequate security configurations
-- Log retention policies that don't consider data sensitivity
-- Third-party logging services receiving sensitive data
+## What to Report
 
-**10. Development vs Production Logging**
-- Debug information with sensitive data in production logs
-- Development logging configurations deployed to production
-- Test data or mock credentials appearing in production logs
-- Verbose logging enabled for troubleshooting and never disabled
-- Different logging behaviors between environments
-
-Please provide:
-- Specific file locations and line numbers where sensitive data is logged
-- Risk level assessment (Critical/High/Medium/Low) based on data sensitivity
-- Examples of sensitive data patterns found in logging statements
-- Recommended data masking or redaction techniques
-- Configuration changes needed to secure logging
-- Framework-specific logging security best practices
-- Code examples showing secure logging alternatives
+For each finding, provide:
+- **File** and line number
+- **Log statement** or configuration entry
+- **Data type** being logged (credential, PII, financial, etc.)
+- **Risk**: CRITICAL (passwords, tokens, SSN, payment data) / HIGH (email, phone, PII) / MEDIUM (internal system details) / LOW (non-sensitive debug information left enabled in production)
+- **Recommendation**: masking, redaction, or removal approach

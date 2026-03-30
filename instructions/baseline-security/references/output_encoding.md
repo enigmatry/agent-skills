@@ -149,7 +149,7 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 <!-- SAFE - validate against whitelist -->
 ```
 
-## 6. What to Report
+## 5. What to Report
 
 **Report ALL instances of (HIGH PRIORITY):**
 - `Html.Raw()` usage in Razor views with non-constant values
@@ -173,7 +173,7 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 - **MEDIUM**: Database or API content without encoding validation
 - **LOW**: Admin-only or trusted content with security bypass (still requires justification)
 
-## 8. Best Practices Verification
+## 6. Best Practices Verification
 
 **Verify that the application:**
 - Uses framework default encoding (don't disable it)
@@ -191,3 +191,4 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 4. Use established libraries for sanitization (DOMPurify, etc.)
 5. Regularly update dependencies to patch XSS vulnerabilities
 6. Conduct security code reviews for all security bypasses
+

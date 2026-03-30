@@ -1,3 +1,5 @@
+# Data Minimization Analysis
+
 Analyze the codebase to ensure API endpoints only return the minimum data required by the frontend, preventing unnecessary sensitive data exposure:
 
 ## Core Security Principle
@@ -100,9 +102,9 @@ interface UserResponse {
 ## 6. Security Risk Assessment
 
 **Rate each endpoint's data exposure:**
-- 🟢 **MINIMAL**: Only necessary fields returned and used
-- 🟡 **MODERATE**: Some extra fields but no sensitive data
-- 🔴 **EXCESSIVE**: Sensitive or unnecessary data exposed
+- **MINIMAL**: Only necessary fields returned and used
+- **MODERATE**: Some extra fields but no sensitive data
+- **EXCESSIVE**: Sensitive or unnecessary data exposed
 
 **Common violations to check:**
 - User management APIs returning password hashes/salts
@@ -128,53 +130,12 @@ interface UserResponse {
 - Minor inefficiencies in data transfer
 - Legacy fields maintained for backward compatibility
 
-## Expected Deliverables
+## What to Report
 
-1. **Endpoint Inventory** - Complete list of API endpoints with returned fields
-2. **Usage Matrix** - Mapping of which response fields are used where in frontend
-3. **Vulnerability Report** - Specific instances of unnecessary data exposure
-4. **Remediation Plan** - Prioritized list of changes needed
-5. **Code Examples** - Before/after examples showing proper data minimization
+For each finding, provide:
+- **Endpoint** (file and line number)
+- **Response field(s)** or **data category** that is unnecessarily exposed
+- **Exposure level**: EXCESSIVE (sensitive data never used in frontend) / MODERATE (extra non-sensitive fields) / MINIMAL (only necessary fields returned)
+- **Risk**: HIGH (sensitive personal data, credentials, or system internals) / MEDIUM (unused non-sensitive fields) / LOW (minor inefficiency or legacy field)
+- **Recommendation**: remove the field from the response DTO, apply field selection, or scope the query
 
-## Implementation Recommendations
-
-**Backend (C#/.NET):**
-```csharp
-// Use specific DTOs instead of entities
-public class UserSummaryDto 
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    // Only include what frontend needs
-}
-
-// Implement field selection
-[HttpGet]
-public async Task<IActionResult> GetUsers([FromQuery] string[] fields)
-{
-    // Return only requested fields
-}
-```
-
-**Frontend (Angular/TypeScript):**
-```typescript
-// Define minimal interfaces
-interface UserSummary {
-    id: number;
-    name: string;
-    // Only properties actually used in templates
-}
-
-// Request specific fields when possible
-getUsers(fields?: string[]): Observable<UserSummary[]> {
-    const params = fields ? { fields: fields.join(',') } : {};
-    return this.http.get<UserSummary[]>('/api/users', { params });
-}
-```
-
-## Success Criteria
-- Zero sensitive data unnecessarily exposed in API responses
-- >90% of returned API fields actively used in frontend
-- Clear documentation of data flow from API to UI
-- Performance improvement from reduced data transfer
-- Reduced attack surface through minimized data exposure

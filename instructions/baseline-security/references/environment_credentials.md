@@ -162,7 +162,7 @@ export const environment = {
 - `publish-web-profile-prod-*.proj` - Production deployment profile
 - `publish-web-profile-[env]-*.proj` - Any environment-specific deployment profiles
 
-## 8. What to Report
+## 5. What to Report
 
 **Report ALL instances of credential reuse (priority varies by environment pair):**
 
@@ -223,7 +223,7 @@ Finding: Database Username Reused Across Environments
 - Recommendation: Create separate database users (e.g., app_user_dev, app_user_prod)
 ```
 
-## 10. Credential Types to Verify
+## 6. Credential Types to Verify
 
 **Database credentials:**
 - SQL Server usernames
@@ -259,7 +259,7 @@ Finding: Database Username Reused Across Environments
 - API authentication tokens
 - Service account credentials
 
-## 13. Remediation Recommendations
+## 7. Remediation Recommendations
 
 **For database credentials:**
 1. Create separate database users per environment
@@ -284,3 +284,4 @@ Finding: Database Username Reused Across Environments
 2. Implement environment-specific variable groups
 3. Use Azure KeyVault references for secrets
 4. Implement approval gates for production deployments
+
