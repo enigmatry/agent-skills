@@ -101,6 +101,32 @@ _configuration["ConnectionStrings:Database"]; // From secure store
 #endif
 ```
 
+**Check the infrastructure repository for Key Vault configuration:**
+
+**Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`. Look only at the folder or module that corresponds to the project currently being audited (ask the user for the project/folder name if unclear). Check there for `Microsoft.KeyVault/vaults` Bicep resource definitions.
+
+```bicep
+// GOOD — soft delete and purge protection guard against accidental or malicious deletion
+resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
+  properties: {
+    enableSoftDelete: true
+    enablePurgeProtection: true
+    enableRbacAuthorization: true  // Prefer RBAC over legacy access policies
+  }
+}
+
+// RED FLAG — purge protection disabled (secrets can be permanently and immediately deleted)
+properties: {
+  enableSoftDelete: true
+  enablePurgeProtection: false
+}
+
+// RED FLAG — secrets hardcoded as Bicep parameters passed at deploy time
+// (values end up in deployment history in plain text)
+param mySecret string  // if wired to a Key Vault secret value, this is acceptable;
+                       // if the actual secret string is passed directly, flag it
+```
+
 ## 5. Third-Party Service Credentials
 
 **Audit integration credentials and service connections:**

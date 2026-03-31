@@ -74,6 +74,18 @@ This skill performs the following security checks (each with detailed guidance i
     - *See: references/ssl_tls_configuration.md*
     - **Note**: Requires production URL. Ask the user for the URL at the start of the audit and store it as `PRODUCTION_URL` for this check.
 
+21. **Database Field Encryption** - Verifies that sensitive fields (SSN, credit card numbers, bank account details, etc.) are encrypted at the column or application level so they are unreadable with direct database access
+    - *See: references/database_field_encryption.md*
+
+22. **Code Quality** - Reviews build pipeline warnings for security-related issues and checks SonarQube for vulnerability and security hotspot ratings
+    - *See: references/code_quality.md*
+
+23. **Authentication Security** - Verifies that a standard authentication protocol (OpenID Connect, Authorization Code + PKCE) is used, all API endpoints require authorization by default, Swagger is restricted to Development, and token lifetime and password policies meet minimum requirements
+    - *See: references/authentication_security.md*
+
+24. **CORS Configuration** - Verifies that Cross-Origin Resource Sharing is configured with an explicit origin allowlist, that wildcard origins are not used with credentials, and that Angular development proxies are not masking missing CORS configuration
+    - *See: references/cors_configuration.md*
+
 Each check provides:
 - Specific patterns to search for
 - RED FLAGS to identify
@@ -118,6 +130,10 @@ Before doing anything else, present the full list of available checks and ask th
 > | 18 | Version Info Headers |
 > | 19 | HTTP Verb Whitelisting |
 > | 20 | SSL/TLS Configuration |
+> | 21 | Database Field Encryption |
+> | 22 | Code Quality |
+> | 23 | Authentication Security |
+> | 24 | CORS Configuration |
 >
 > Reply with **`all`** to run all checks, or provide a comma-separated list of numbers (e.g. `1, 3, 5`) to run a specific subset."
 

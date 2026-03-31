@@ -218,6 +218,41 @@ Sweet32 (3DES) - 3DES must be disabled
 - Certificate issues → May result in F
 - SSL 2.0/3.0 enabled → Automatic F
 
+## 9. Azure App Service TLS Configuration (Infrastructure Code)
+
+For Azure-hosted applications, HTTPS enforcement and the minimum TLS version are set on the App Service resource in infrastructure-as-code.
+
+**Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`. Look only at the folder or module that corresponds to the project currently being audited (ask the user for the project/folder name if unclear). Check there for `Microsoft.Web/sites` Bicep resource definitions.
+
+**GOOD:**
+```bicep
+resource appService 'Microsoft.Web/sites@2022-03-01' = {
+  properties: {
+    httpsOnly: true
+    siteConfig: {
+      minTlsVersion: '1.2'   // or '1.3'
+      ftpsState: 'Disabled'  // FTP must be disabled
+    }
+  }
+}
+```
+
+**RED FLAGS:**
+```bicep
+// BAD — HTTPS not enforced
+properties: {
+  httpsOnly: false   // or property absent (defaults to false)
+  siteConfig: {
+    minTlsVersion: '1.0'  // Too low
+  }
+}
+```
+
+**What to check:**
+- `httpsOnly: true` — App Service must redirect HTTP to HTTPS
+- `minTlsVersion` — must be `'1.2'` or `'1.3'`; flag `'1.0'` or `'1.1'` as HIGH
+- `ftpsState: 'Disabled'` — FTP access must be disabled in production; flag `'AllAllowed'` or `'FtpsOnly'` as MEDIUM
+
 ## 10. What to Report
 
 **For each production endpoint tested:**
