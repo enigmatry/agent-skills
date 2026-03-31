@@ -151,37 +151,27 @@ var keyBytes = await keyVaultClient.GetSecretAsync("FieldEncryptionKey");
 
 ## 6. Transparent Data Encryption (TDE)
 
-Transparent Data Encryption encrypts the entire database at rest — data files, log files, and backups — protecting against exposure from physical media theft or file-level access. It is enabled by default on new Azure SQL databases but can be explicitly disabled.
+Transparent Data Encryption encrypts the entire database at rest — data files, log files, and backups — protecting against exposure from physical media theft or file-level access. **TDE is enabled by default on Azure SQL and requires no configuration. Only flag this if it has been explicitly disabled.**
 
-**Check infrastructure-as-code and deployment scripts for TDE being turned off:**
+**Only search for evidence of TDE being turned off:**
 
 ```bicep
 // RED FLAG — TDE explicitly disabled in Bicep
 resource sqlDb 'Microsoft.Sql/servers/databases@2021-11-01' = {
   properties: {
     transparentDataEncryption: {
-      state: 'Disabled'  // Must be 'Enabled'
+      state: 'Disabled'  // flag this; absence of this block is fine (defaults to Enabled)
     }
-  }
-}
-```
-
-```json
-// RED FLAG — ARM template with TDE disabled
-{
-  "type": "Microsoft.Sql/servers/databases/transparentDataEncryption",
-  "properties": {
-    "state": "Disabled"
   }
 }
 ```
 
 **Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`. Look only at the folder or module that corresponds to the project currently being audited (ask the user for the project/folder name if unclear). Check there for Azure SQL database definitions.
 
-**Files to check:**
-- `*.bicep` in the infrastructure repository — search for `Microsoft.Sql/servers/databases` resources
-- Azure CLI scripts (`az sql db tde set --status Disabled`)
-- Any CI/CD pipeline scripts that configure the Azure SQL database
+**Search for:**
+- `state: 'Disabled'` near `transparentDataEncryption` in Bicep files
+- `az sql db tde set --status Disabled` in Azure CLI scripts or pipeline YAML
+- If neither is found, TDE is enabled — no finding needed
 
 **Note:** TDE protects data at the file level only. It does not prevent a user with valid database credentials from reading sensitive column values — column-level encryption (sections 2–3) is still required for fields such as SSN and credit card numbers.
 

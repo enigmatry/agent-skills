@@ -83,9 +83,6 @@ This skill performs the following security checks (each with detailed guidance i
 23. **Authentication Security** - Verifies that a standard authentication protocol (OpenID Connect, Authorization Code + PKCE) is used, all API endpoints require authorization by default, Swagger is restricted to Development, and token lifetime and password policies meet minimum requirements
     - *See: references/authentication_security.md*
 
-24. **CORS Configuration** - Verifies that Cross-Origin Resource Sharing is configured with an explicit origin allowlist, that wildcard origins are not used with credentials, and that Angular development proxies are not masking missing CORS configuration
-    - *See: references/cors_configuration.md*
-
 Each check provides:
 - Specific patterns to search for
 - RED FLAGS to identify

@@ -103,7 +103,8 @@ _configuration["ConnectionStrings:Database"]; // From secure store
 
 **Check the infrastructure repository for Key Vault configuration:**
 
-**Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`. Look only at the folder or module that corresponds to the project currently being audited (ask the user for the project/folder name if unclear). Check there for `Microsoft.KeyVault/vaults` Bicep resource definitions.
+**Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`. 
+Clone it with git — no special tooling is required. Ask the user for the project folder path (e.g. /tenants/enigmatry/projects/my-project) before cloning
 
 ```bicep
 // GOOD — soft delete and purge protection guard against accidental or malicious deletion
