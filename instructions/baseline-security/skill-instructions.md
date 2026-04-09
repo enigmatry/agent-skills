@@ -175,6 +175,7 @@ After completing **each individual check**, create one Jira story per finding us
 | `description` | Finding location (file + line number), description of the issue, remediation steps     |
 | `labels`      | `BaselineSecurity`                                                                     |
 | `priority`    | Mapped from the normalization table above                                              |
+| `relates to`  | The story under the latest epic in the ETL project for the baseline security (i.e. Baseline security compliance Q2-2026) with the name of the current project. |
 
 **Example summary:** `[Security Audit] Secrets Management: Hardcoded API key in appsettings.json`
 
