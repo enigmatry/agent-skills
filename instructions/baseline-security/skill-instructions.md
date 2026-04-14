@@ -156,11 +156,11 @@ Reference files use two different severity scales. Normalize all findings to a s
 |--------------------------------------------|---------------|
 | 🔴 Critical / Critical                     | `Highest`     |
 | 🟡 High / High / High Priority             | `High`        |
-| 🟢 Medium / Medium / Medium Priority       | `Medium`      |
+| 🟢 Medium / Medium / Medium Priority       | `Normal`      |
 | 🔵 Low / Low / Low Priority                | `Low`         |
 
 When a reference file uses `✅ SECURE / ⚠️ PARTIALLY SECURE / ❌ INSECURE` status markers,
-map them as: `⚠️ PARTIALLY SECURE` → `Medium`, `❌ INSECURE` → `High`.
+map them as: `⚠️ PARTIALLY SECURE` → Normal, `❌ INSECURE` → High.
 
 ### Step 3 — Create a Jira Story for Each Finding
 
@@ -175,12 +175,20 @@ After completing **each individual check**, create one Jira story per finding us
 | `description` | Finding location (file + line number), description of the issue, remediation steps     |
 | `labels`      | `BaselineSecurity`                                                                     |
 | `priority`    | Mapped from the normalization table above                                              |
-| `relates to`  | The story under the latest epic in the ETL project for the baseline security (i.e. Baseline security compliance Q2-2026) with the name of the current project. |
 
 **Example summary:** `[Security Audit] Secrets Management: Hardcoded API key in appsettings.json`
 
-After each `create_issue` call succeeds, echo the created story key inline in the audit output,
-for example: *(→ created [PROJ-42](https://enigmatry.atlassian.net/browse/PROJ-42))*
+After each `create_issue` call succeeds:
+
+1. Echo the created story key inline in the audit output, e.g.: *(→ created [PROJ-42](https://enigmatry.atlassian.net/browse/PROJ-42))*
+2. Call `createIssueLink` to relate the new story to the ETL project story for this project
+   (the story under the "Baseline security compliance Q2-2026" epic whose name matches the current project):
+   - `type`: `"Relates"`
+   - `inwardIssue`: newly created story key (e.g. `YES-42`)
+   - `outwardIssue`: ETL project story key (e.g. `ETL-2879`)
+
+> ⚠️ Do **not** use `customfield_10014` (Epic Link) for this — that field only accepts Epics.
+> The ETL story is a *Story*, not an Epic. Use `createIssueLink` instead.
 
 ### Step 4 — Final Summary Table
 
