@@ -130,7 +130,6 @@ Before doing anything else, present the full list of available checks and ask th
 > | 21 | Database Field Encryption |
 > | 22 | Code Quality |
 > | 23 | Authentication Security |
-> | 24 | CORS Configuration |
 >
 > Reply with **`all`** to run all checks, or provide a comma-separated list of numbers (e.g. `1, 3, 5`) to run a specific subset."
 
