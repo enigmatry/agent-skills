@@ -52,9 +52,9 @@ Scan the codebase for packages with known security vulnerabilities, deprecated p
 **Recommended scanning methods:**
 ```bash
 # .NET vulnerability scanning
-dotnet list package --vulnerable
-dotnet list package --deprecated
-dotnet list package --outdated
+# ⚠️ ALWAYS include --include-transitive — direct-package scans miss the majority of real-world CVEs
+dotnet list package --vulnerable --include-transitive
+dotnet list package --deprecated --include-transitive
 
 # npm vulnerability scanning  
 npm audit
