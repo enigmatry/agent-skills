@@ -20,6 +20,7 @@ Analyze security headers to identify missing or misconfigured values that protec
 
 **Files to examine:**
 - `web.config` / `Web.config` — may exist in multiple locations; identify each file's owner before evaluating it
+- `web.release.config` — XDT transform applied on top of `web.config` for non-development environments; always check this alongside `web.config` and apply its transforms mentally to determine the effective header values in production
 - Look in the Angular project's published output folder
 - `Deployment/*.proj` — deployment profiles may override the CSP header per environment via `<ParameterValue>` elements; search for `<ParameterValue Include="Content Security Policy">` and evaluate the `<Value>` against the CSP rules below
 
