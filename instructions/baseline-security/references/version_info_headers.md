@@ -19,6 +19,7 @@ Analyze HTTP responses to identify headers that disclose platform and version in
 - API `web.config` files
 - Front-end Angular application `web.config`
 - Any `Web.config` (check capitalization variants)
+- `web.release.config` — XDT transform applied on top of `web.config` for non-development environments; always check this alongside `web.config` and apply its transforms mentally to determine the effective header values in production
 
 **GOOD configuration - Remove headers:**
 ```xml

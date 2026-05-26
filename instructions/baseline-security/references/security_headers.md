@@ -1,16 +1,30 @@
 # Security Headers Configuration Analysis
 
-Analyze the configuration to identify missing or misconfigured security headers that protect against common web vulnerabilities:
+Analyze security headers to identify missing or misconfigured values that protect against common web vulnerabilities.
 
 ## Core Security Principle
 **Security headers provide defense-in-depth protection against XSS, clickjacking, MIME-sniffing, and other attacks. Proper configuration of these headers is essential for web application security.**
 
+## 0. Inspection Priority
+
+**Always prefer live URL inspection over static code/config analysis.**
+
+| Situation | Approach |
+|-----------|----------|
+| `PRODUCTION_URL` is available | Fetch actual response headers from the live URL — this is the ground truth. Use the `fetch` tool to retrieve `HEAD` or `GET` response headers from `PRODUCTION_URL`. Base all findings on what the server actually returns. |
+| `PRODUCTION_URL` is not available | Fall back to inspecting `web.config`, middleware (`Program.cs` / `Startup.cs`), and any other config files as described in the sections below. Clearly note in each finding that it is based on static analysis only. |
+
+> When using the live URL, request both the front-end root (`/`) and a known API endpoint (e.g. `/api/health` or `/swagger`) so headers for both the Angular front-end and the API backend can be assessed independently.
+
 ## 1. Front-End Application Headers (web.config)
 
 **Files to examine:**
-- `web.config` - IIS configuration for Angular application
-- `Web.config` - Check both capitalizations
+- `web.config` / `Web.config` — may exist in multiple locations; identify each file's owner before evaluating it
+- `web.release.config` — XDT transform applied on top of `web.config` for non-development environments; always check this alongside `web.config` and apply its transforms mentally to determine the effective header values in production
 - Look in the Angular project's published output folder
+- `Deployment/*.proj` — deployment profiles may override the CSP header per environment via `<ParameterValue>` elements; search for `<ParameterValue Include="Content Security Policy">` and evaluate the `<Value>` against the CSP rules below
+
+> ⚠️ **Multi-app projects** (e.g. a project with both a frontoffice and a backoffice) will have multiple `web.config` files. Before evaluating any `web.config`, determine whether it belongs to a **frontend** (Angular) app or a **backend** (API) app by inspecting its parent folder and sibling files (e.g. presence of `index.html`, `*.js` bundles → frontend; presence of `*.dll`, `appsettings.json` → backend). Apply the front-end header rules to frontend configs and the API header rules to backend configs. Report findings per app, not as a single combined result.
 
 **Configuration location in web.config:**
 ```xml
@@ -149,6 +163,13 @@ frame-ancestors 'self';
 - `max-age=31536000` - 1 year (minimum recommended)
 - `includeSubDomains` - Apply to all subdomains
 - `preload` - Eligible for browser preload list (optional)
+
+**HSTS may also be configured via the `Enigmatry.Entry.AspNetCore` package** using the `AddEntryHttps` / `UseEntryHttps` extension methods in `Program.cs` / `Startup.cs`. Search for these calls before concluding HSTS is missing:
+```csharp
+services.AddEntryHttps();
+app.UseEntryHttps();
+```
+If found, treat HSTS as configured. These methods do not expose `max-age`, `includeSubDomains`, or `preload` parameters — do not flag their absence.
 
 **RED FLAGS:**
 ```xml

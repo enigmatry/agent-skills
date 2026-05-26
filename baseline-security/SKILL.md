@@ -1,6 +1,6 @@
 ---
 name: baseline-security-audit
-description: Ensures baseline security practices are followed in the project. Use this when asked to perform a security audit on the codebase. Automatically creates Jira stories for each security finding.
+description: Ensures baseline security practices are followed in the project. Use this when asked to perform a security audit on the codebase. Can create Jira stories for selected security findings.
 ---
 
 # Baseline Security Audit Skill

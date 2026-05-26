@@ -1,13 +1,13 @@
 ---
 name: baseline-security-audit
-description: Ensures baseline security practices are followed in the project. Use this when asked to perform a security audit on the codebase. Automatically creates Jira stories for each security finding.
+description: Ensures baseline security practices are followed in the project. Use this when asked to perform a security audit on the codebase. Can create Jira stories for selected security findings.
 ---
 
 # Baseline Security Audit Skill
 
 ## Overview
 
-This skill performs a comprehensive baseline security audit of the codebase by analyzing common security vulnerabilities and misconfigurations. For each security finding, it can automatically create Jira stories for tracking and remediation.
+This skill performs a comprehensive baseline security audit of the codebase by analyzing common security vulnerabilities and misconfigurations. It can create Jira stories for selected findings after user confirmation for tracking and remediation.
 
 ## What This Skill Does
 
@@ -63,6 +63,7 @@ This skill performs the following security checks (each with detailed guidance i
 
 17. **Security Headers** - Checks proper configuration of CSP, HSTS, X-Frame-Options, and other security headers
     - *See: references/security_headers.md*
+    - **Note**: Uses `PRODUCTION_URL` collected at the start of the audit. If empty, skip live analysis and note it in the findings.
 
 18. **Version Info Headers** - Prevents disclosure of platform/version information in HTTP headers
     - *See: references/version_info_headers.md*
@@ -72,7 +73,7 @@ This skill performs the following security checks (each with detailed guidance i
 
 20. **SSL/TLS Configuration** - Validates SSL/TLS protocol versions and cipher suites using SSL Labs analysis
     - *See: references/ssl_tls_configuration.md*
-    - **Note**: Requires production URL. Ask the user for the URL at the start of the audit and store it as `PRODUCTION_URL` for this check.
+    - **Note**: Uses `PRODUCTION_URL` collected at the start of the audit. If empty, skip live analysis and note it in the findings.
 
 21. **Database Field Encryption** - Verifies that sensitive fields (SSN, credit card numbers, bank account details, etc.) are encrypted at the column or application level so they are unreadable with direct database access
     - *See: references/database_field_encryption.md*
@@ -136,6 +137,13 @@ Before doing anything else, present the full list of available checks and ask th
 Store the selected check numbers as `SELECTED_CHECKS`. Only run, report on, and create Jira stories for the selected checks.
 Do **not** ask again during the audit.
 
+If `SELECTED_CHECKS` includes **17 (Security Headers)** or **20 (SSL/TLS Configuration)** — or if `all` was selected — ask the user for the production URL immediately after the check selection:
+
+> "Checks 17 and/or 20 require a live URL. What is the production URL? (leave blank to skip live inspection and fall back to static analysis)"
+
+Store the answer as `PRODUCTION_URL`. If the user leaves it blank, set `PRODUCTION_URL` to empty and proceed with static analysis for both checks.
+Do **not** ask for this URL again during the audit.
+
 ## Jira Integration
 
 ### Step 1 — Collect the Jira Project Code (ask once, at the very start)
@@ -161,10 +169,28 @@ Reference files use two different severity scales. Normalize all findings to a s
 When a reference file uses `✅ SECURE / ⚠️ PARTIALLY SECURE / ❌ INSECURE` status markers,
 map them as: `⚠️ PARTIALLY SECURE` → Normal, `❌ INSECURE` → High.
 
-### Step 3 — Create a Jira Story for Each Finding
+### Step 3 — Present All Findings and Ask Which to Send to Jira
 
-After completing **each individual check**, create one Jira story per finding using the
-`create_issue` tool with the following fields:
+After **all selected checks** are complete, output a numbered consolidated table of every finding:
+
+| # | Check | Finding | Priority |
+|---|-------|---------|----------|
+| 1 | Secrets Management | Hardcoded API key in appsettings.json | High |
+| 2 | ... | ... | ... |
+
+Then ask the user exactly once:
+
+> "Which findings should be created as Jira stories?
+> Reply with **`all`** to create stories for all findings, a comma-separated list of numbers (e.g. `1, 3, 5`), or **`none`** to skip Jira creation."
+
+Do **not** create any Jira stories before receiving this answer.
+
+### Step 4 — Create a Jira Story for Each Selected Finding
+
+> **Package Security — special consolidation rule:**
+> Instead of one story per package, consolidate all npm findings into a single story and all NuGet findings into a single story (at most 2 stories for this check). List every affected package, its current version, recommended version, CVE(s), and risk level in the description of the consolidated story. Apply the highest priority among the individual findings to the consolidated story. If a package ecosystem has no findings, omit its story entirely.
+
+For each finding selected by the user, create one Jira story using the `create_issue` tool with the following fields:
 
 | Field         | Value                                                                                  |
 |---------------|----------------------------------------------------------------------------------------|
@@ -189,13 +215,13 @@ After each `create_issue` call succeeds:
 > ⚠️ Do **not** use `customfield_10014` (Epic Link) for this — that field only accepts Epics.
 > The ETL story is a *Story*, not an Epic. Use `createIssueLink` instead.
 
-### Step 4 — Final Summary Table
+### Step 5 — Final Summary Table
 
-After all selected checks are complete, output a consolidated table of all created stories:
+After all selected stories are created, output a consolidated table:
 
 | Story Key | Check | Summary | Priority |
 |-----------|-------|---------|----------|
 | PROJ-42   | Secrets Management | Hardcoded API key in appsettings.json | High |
 | ...       | ...   | ...     | ...      |
 
-If no findings were produced for a check, skip story creation for that check silently.
+If the user replied `none`, skip story creation and omit this table.
