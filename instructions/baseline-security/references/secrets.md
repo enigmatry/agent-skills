@@ -5,6 +5,16 @@ Analyze the codebase to identify hardcoded secrets, credentials, and sensitive c
 ## Core Security Principle
 **No secrets, credentials, API keys, or sensitive configuration should be hardcoded in source code. All sensitive data must be externalized to secure configuration stores and properly protected.**
 
+## Not a Finding: Public Identifiers
+
+**Do not report public, non-secret identifiers as hardcoded secrets.** These values are designed to be visible (they ship in every SPA bundle and in OpenID discovery documents) and grant no access on their own:
+
+- Microsoft Entra ID / Azure AD / CIAM: `Instance`, `Authority`, `TenantId`, `ClientId` (application ID), `Audience`, `Scope` / `api://...` URIs, redirect URIs
+- Other OAuth/OIDC providers: public client IDs, issuer and authority URLs
+- Application Insights connection strings and instrumentation keys, Azure resource names, subscription and tenant GUIDs
+
+Committed values like these in `appsettings*.json`, `environment.ts` or pipeline variables are **not** a Secrets Management finding. Only report them when a credential is committed alongside them — a `ClientSecret`, certificate/private key, password, or a connection string with embedded credentials — and in that case report the credential, not the identifier.
+
 ## 1. Hardcoded Secrets Detection
 
 **Search for common secret patterns in all files:**
