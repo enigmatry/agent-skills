@@ -50,10 +50,12 @@ services.Configure<CookiePolicyOptions>(options =>
 {
     options.HttpOnly = HttpOnlyPolicy.None;      // Do NOT use Always: it makes the Angular XSRF-TOKEN cookie unreadable and silently disables CSRF protection
     options.Secure = CookieSecurePolicy.Always;  // MUST be Always
-    options.MinimumSameSitePolicy = SameSiteMode.Lax;  // Do NOT use Strict: it overrides the SameSite=None that OIDC correlation/nonce cookies require and breaks sign-in
+    options.MinimumSameSitePolicy = SameSiteMode.Unspecified;  // the default: no global minimum. Lax or Strict here upgrades the SameSite=None that OIDC correlation/nonce cookies require and breaks sign-in; set SameSite per cookie instead (see the table below)
 });
 app.UseCookiePolicy(); // the options above only apply when this middleware is in the pipeline
 ```
+
+Report any `MinimumSameSitePolicy` of `Lax` or `Strict` as HIGH when the app signs in through OpenID Connect; Microsoft's policy matrix shows `None` cookies being raised to the minimum (https://learn.microsoft.com/aspnet/core/security/samesite).
 
 **Cookies that are exceptions by design (never report these):**
 

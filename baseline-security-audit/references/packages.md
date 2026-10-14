@@ -107,12 +107,7 @@ Use the NVD CVSS severity bands as reported by the advisory; do not shift them u
 **LOW (Monitor):**
 - CVSS 0.1–3.9
 
-Not findings: minor or patch updates available, pre-release versions available, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
-
-**LOW (Monitor):**
-- Pre-release updates available
-- Documentation-only updates
-- Non-critical feature additions
+Not findings: minor or patch updates available, pre-release versions available, documentation-only or feature-only updates, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
 
 ## 7. Compatibility and Breaking Changes
 **Assess update impact:**

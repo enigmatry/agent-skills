@@ -60,16 +60,20 @@ CA5397  — Do not use deprecated SslProtocols values
 CA3001–CA3147 — Various injection and XSS risks
 ```
 
-**The CA security rules above are OFF by default.** They only run when the project enables them. A clean build log proves nothing unless one of these is present:
-- `<AnalysisMode>All</AnalysisMode>` or `<AnalysisModeSecurity>All</AnalysisModeSecurity>` in the `.csproj` or `Directory.Build.props`
-- `dotnet_analyzer_diagnostic.category-Security.severity = warning` (or `error`) in `.editorconfig`
-- `<EnableNETAnalyzers>true</EnableNETAnalyzers>` with a matching `<AnalysisLevel>`
+**The CA security rules above are OFF by default.** They only run when the project enables them. A clean build log proves nothing unless one of these is present in the `.csproj`, `Directory.Build.props` or `.editorconfig`:
+- `<AnalysisMode>All</AnalysisMode>` or `<AnalysisModeSecurity>All</AnalysisModeSecurity>`
+- `<AnalysisLevel>latest-All</AnalysisLevel>` (or `<version>-All`)
+- Explicit per-rule severities in `.editorconfig`, e.g. `dotnet_diagnostic.CA2100.severity = warning`, `dotnet_diagnostic.CA5350.severity = warning`
 
-Report "security analyzers not enabled" as a MEDIUM finding when none of these is configured.
+Do **not** accept these as evidence; they do not turn on rules that are disabled by default:
+- `dotnet_analyzer_diagnostic.category-Security.severity = warning` or `dotnet_analyzer_diagnostic.severity = warning` (bulk severity only changes rules that are already enabled)
+- `<EnableNETAnalyzers>true</EnableNETAnalyzers>` on its own (it is already the default and only enables analyzer execution)
+
+Report "security analyzers not enabled" as a MEDIUM finding when none of the accepted settings is configured. Reference: https://learn.microsoft.com/dotnet/fundamentals/code-analysis/configuration-options
 
 **RED FLAGS:**
 - Build warnings suppressed in bulk via `<NoWarn>` without justification, or `<NoWarn>` containing `CA2100`, `CA5xxx` or `NU1901`–`NU1904`
-- `<WarningsAsErrors>` does not include `NU1903;NU1904` (vulnerable packages should fail CI); note that `<WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>` next to `TreatWarningsAsErrors=true` is Microsoft's recommended pattern and not a red flag
+- Vulnerable packages do not fail CI. Compliant when either `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` is set (it promotes `NU1903`/`NU1904` with every other warning) or `<WarningsAsErrors>` lists `NU1903;NU1904`. Red flag when neither is set, or when `TreatWarningsAsErrors=true` is combined with `<WarningsNotAsErrors>` that lists `NU1903` or `NU1904` (Microsoft's documented pattern of excluding only `NU1901;NU1902` is fine). Reference: https://learn.microsoft.com/nuget/concepts/auditing-packages
 - Vulnerability advisories present in restore output but not acted on
 - `NU1900` or `NU1905` in the restore output: the audit could not run (no vulnerability data source configured), which is itself a finding
 
@@ -100,7 +104,7 @@ Use the MCP tools when available: `get_project_quality_gate_status`, `get_compon
 **RED FLAGS:**
 - Security rating below A on Overall Code
 - Security Review rating below A (fewer than 80% of hotspots reviewed) on servers that still have hotspots
-- Quality gate without a security condition (Security rating on New Code or Overall Code), or a pipeline that does not wait for the gate (`SonarQubePublish` without `pollingTimeoutSec`, or Sonar tasks with `continueOnError: true`)
+- Quality gate without a security condition (Security rating on New Code or Overall Code), or a pipeline that does not wait for the gate (`SonarQubePublish` with `pollingTimeoutSec: 0`, no `SonarQubePublish`/`SonarCloudPublish` task at all, or Sonar tasks with `continueOnError: true`). A publish task without an explicit `pollingTimeoutSec` is compliant: it polls for 300 seconds by default
 
 ## 4. SonarQube — Code Quality (Technical Debt)
 
