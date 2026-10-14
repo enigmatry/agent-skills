@@ -11,7 +11,9 @@ Analyze the codebase for secure exception handling that logs complete error deta
 - Full stack traces logged using `logger.LogError(exception, message)`
 - Proper exception context (request details, user info, correlation IDs)
 
-**Search for:** `UseExceptionHandler`, `ExceptionFilterAttribute`, `OnException`, global middleware registration
+**Search for:** `UseExceptionHandler`, `AddExceptionHandler<T>()` / `IExceptionHandler` (.NET 8+), `AddProblemDetails()` / `IProblemDetailsService`, `UseStatusCodePages()`, `ExceptionFilterAttribute`, `OnException`, global middleware registration
+
+> **.NET 10 behaviour change:** when an `IExceptionHandler.TryHandleAsync` returns `true`, `ExceptionHandlerMiddleware` no longer logs the exception or emits the `error.type` metric unless `ExceptionHandlerOptions.SuppressDiagnosticsCallback` returns `false`. On .NET 10 projects, any handler that returns `true` must itself call `logger.LogError(exception, ...)`, or the callback must be configured; otherwise report "unhandled exceptions not logged" as HIGH. On .NET 8 and 9 the middleware logs before invoking the handler, so a handler without its own `LogError` is not a gap. Determine the version from `<TargetFramework>`.
 
 ### 2. Secure Error Response Analysis
 **Critical Security Check - In PRODUCTION:**

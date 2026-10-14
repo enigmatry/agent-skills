@@ -101,8 +101,9 @@ ECDSA key size: ≥ 256 bits
 Signature algorithm: SHA-256 or better
 Certificate chain: Complete and valid
 Certificate transparency: Enabled
-OCSP stapling: Enabled (optional but recommended)
-Validity period: ≤ 398 days (current CA/Browser Forum requirement)
+OCSP stapling: Enabled only if the certificate carries an OCSP URL (Let's Encrypt stopped OCSP in August 2025; CRL-only certificates cannot staple and this is not a finding)
+Validity period: ≤ 200 days for certificates issued on or after 15 March 2026 (CA/Browser Forum SC-081); ≤ 100 days from 15 March 2027; ≤ 47 days from 15 March 2029
+Renewal: automated (ACME client, App Service managed certificate, Key Vault auto-rotation) — manual renewal cannot keep up with these lifetimes and is a HIGH finding
 ```
 
 **❌ BAD:**
@@ -141,10 +142,10 @@ Session resumption: Supported (for performance)
 
 **✅ SHOULD be enabled:**
 ```
-OCSP Stapling (improves performance and privacy)
+OCSP Stapling (only where the certificate has an OCSP URL; N/A for CRL-only certificates)
 Certificate Transparency (SCTs)
 TLS compression: DISABLED (CRIME attack)
-TLS_FALLBACK_SCSV (prevents downgrade attacks)
+TLS 1.3 (SSL Labs caps servers without TLS 1.3 at A- since March 2025; TLS_FALLBACK_SCSV is no longer graded and is irrelevant once TLS 1.0/1.1 are disabled)
 ```
 
 **❌ MUST be disabled:**
@@ -332,16 +333,16 @@ OCSP Stapling: ✅ Enabled / ❌ Disabled
 - SHA-1 certificate signature
 
 **MEDIUM (Plan to Fix):**
-- Grade B due to TLS 1.0/1.1
 - Cipher suite ordering (client preference)
-- Missing OCSP stapling
-- No TLS 1.3 support
+- Missing OCSP stapling (only when the certificate has an OCSP URL)
+- No TLS 1.3 support (SSL Labs caps the grade at A-)
+- Certificate issued after 15 March 2026 with validity > 200 days, or no automated renewal
 
 **LOW (Best Practice):**
 - HSTS preload eligibility
-- TLS 1.3 adoption
-- 4096-bit RSA or ECDSA certificates
+- ECDSA P-256/P-384 certificates (smaller handshakes; RSA key size above 2048 is not a finding either way)
 - Certificate Transparency compliance
+- Post-quantum hybrid key exchange (X25519MLKEM768) not offered — informational; default in current browsers, available on Windows Server 2025
 
 ## 12. Testing Procedure
 

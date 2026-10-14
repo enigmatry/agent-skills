@@ -151,10 +151,12 @@ CustomValidators
 - Virus scanning
 - Filename sanitization
 
-**Passwords:**
-- Minimum length (at least 8-12 characters)
-- Complexity requirements (optional, but consider)
-- Maximum length (prevent DoS)
+**Passwords (NIST SP 800-63B-4, July 2025):**
+- Minimum length 15 characters for single-factor passwords, 8 when MFA is enforced
+- Maximum length at least 64 characters (prevent DoS with a sane upper bound, e.g. 128)
+- No composition rules (NIST prohibits requiring mixed case, digits or symbols)
+- No periodic expiry; rotate only on evidence of compromise
+- Screened against a breached/common-password blocklist
 - Password confirmation matching
 
 **Phone numbers:**

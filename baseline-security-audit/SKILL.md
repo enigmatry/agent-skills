@@ -194,27 +194,31 @@ Do **not** create any Jira stories before receiving this answer.
 > **Package Security — special consolidation rule:**
 > Instead of one story per package, consolidate all npm findings into a single story and all NuGet findings into a single story (at most 2 stories for this check). List every affected package, its current version, recommended version, CVE(s), and risk level in the description of the consolidated story. Apply the highest priority among the individual findings to the consolidated story. If a package ecosystem has no findings, omit its story entirely.
 
-For each finding selected by the user, create one Jira story using the `create_issue` tool with the following fields:
+Before the first story, call `getAccessibleAtlassianResources` once and store the returned cloud id as `CLOUD_ID`; every Jira call below requires it.
 
-| Field         | Value                                                                                  |
-|---------------|----------------------------------------------------------------------------------------|
-| `project`     | `JIRA_PROJECT_CODE` (collected above)                                                  |
-| `issuetype`   | `Story`                                                                                |
-| `summary`     | `[Security Audit] <Check Name>: <short finding title>`                                 |
-| `description` | Finding location (file + line number), description of the issue, remediation steps     |
-| `labels`      | `BaselineSecurity`                                                                     |
-| `priority`    | Mapped from the normalization table above                                              |
+For each finding selected by the user, create one Jira story using the `createJiraIssue` tool with the following fields:
+
+| Field               | Value                                                                                  |
+|---------------------|----------------------------------------------------------------------------------------|
+| `cloudId`           | `CLOUD_ID`                                                                             |
+| `projectKey`        | `JIRA_PROJECT_CODE` (collected above)                                                  |
+| `issueTypeName`     | `Story`                                                                                |
+| `summary`           | `[Security Audit] <Check Name>: <short finding title>`                                 |
+| `description`       | Finding location (file + line number), description of the issue, remediation steps (Markdown) |
+| `additional_fields` | `{"labels": ["BaselineSecurity"], "priority": {"name": "<mapped priority>"}}` — labels and priority are only accepted through this object |
 
 **Example summary:** `[Security Audit] Secrets Management: Hardcoded API key in appsettings.json`
 
-After each `create_issue` call succeeds:
+After each `createJiraIssue` call succeeds:
 
 1. Echo the created story key inline in the audit output, e.g.: *(→ created [PROJ-42](https://enigmatry.atlassian.net/browse/PROJ-42))*
-2. Call `createIssueLink` to relate the new story to the ETL project story for this project
-   (the story under the "Baseline security compliance Q2-2026" epic whose name matches the current project):
+2. Call `createIssueLink` to relate the new story to the ETL project story for this project:
+   - `cloudId`: `CLOUD_ID`
    - `type`: `"Relates"`
    - `inwardIssue`: newly created story key (e.g. `YES-42`)
    - `outwardIssue`: ETL project story key (e.g. `ETL-2879`)
+
+   Find the ETL story once, before creating the first link, with `searchJiraIssuesUsingJql` (`cloudId` = `CLOUD_ID`), for example `project = ETL AND summary ~ "<current project name>" AND summary ~ "Baseline security"`. If more than one issue matches or none does, show the candidates and ask the user for the key. Store it as `ETL_STORY_KEY` and do not search again.
 
 > ⚠️ Do **not** use `customfield_10014` (Epic Link) for this — that field only accepts Epics.
 > The ETL story is a *Story*, not an Epic. Use `createIssueLink` instead.

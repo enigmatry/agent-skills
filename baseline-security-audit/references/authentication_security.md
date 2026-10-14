@@ -72,8 +72,11 @@ app.UseSwaggerUI(c => { ... });
 ```
 
 **Search for:**
-- `UseSwagger`, `UseSwaggerUI`, `MapSwagger` — verify each is inside an `IsDevelopment()` block
+- Swashbuckle: `UseSwagger`, `UseSwaggerUI`, `MapSwagger` — verify each is inside an `IsDevelopment()` block (`UseSwagger` alone still exposes the JSON document)
 - NSwag: `app.UseOpenApi()`, `app.UseSwaggerUi()` — same requirement
+- .NET 9/10 built-in OpenAPI (`Microsoft.AspNetCore.OpenApi`, the template default since .NET 9): `AddOpenApi()` / `MapOpenApi()` exposes `/openapi/v1.json` — `MapOpenApi()` must be inside an `IsDevelopment()` block
+- Scalar: `MapScalarApiReference()`; ReDoc: `UseReDoc()` — same requirement
+- A project with none of these is not a finding; a project with `MapOpenApi()` or `MapScalarApiReference()` outside a Development guard is a HIGH finding even though no Swashbuckle package is referenced
 
 ## 3. OpenID Connect with Authorization Code Flow and PKCE
 
@@ -242,14 +245,20 @@ The following settings cannot be verified from source code alone. Ask someone wi
 
 > **Please verify the following in the Acceptance and Production environments:**
 >
-> 1. **Access token lifetime** — What is the configured lifetime of access tokens? It must be no longer than **1 hour**.
->    - In Azure AD / Entra ID: check the Token Lifetime Policy assigned to the application registration
->    - Default Azure AD access token lifetime is 1 hour; confirm no policy extends this
+> 1. **Access token lifetime** — What is the configured lifetime of access tokens? It must be no longer than **90 minutes**.
+>    - Microsoft Entra ID issues access tokens with a randomized default lifetime of 60–90 minutes; this default is compliant
+>    - Check that no Configurable Token Lifetime policy assigned to the app registration extends it
+>    - Confirm Continuous Access Evaluation (CAE) is enabled and that Conditional Access sets a sign-in frequency for this app
 >
-> 2. **Password policy** — Does the identity provider enforce a complex password policy?
->    - In Azure AD / Entra ID: check the Password Protection and Authentication Methods policies in the tenant
->    - Minimum requirements: mixed case, numbers, special characters, minimum length of 12 characters
->    - Confirm MFA is enforced for all user accounts
+> 2. **Password policy** — Does the identity provider follow NIST SP 800-63B-4 (July 2025)?
+>    - Minimum length **15 characters** for single-factor passwords, or **8 characters** when MFA is enforced; maximum length at least 64
+>    - **No** composition rules (mixed case, digits, symbols) and **no** periodic rotation; both are prohibited by NIST
+>    - Passwords screened against a breached/common-password blocklist
+>    - In Microsoft Entra ID (cloud-only users the built-in policy is fixed): confirm Entra Password Protection (global and custom banned lists) is enabled and password expiry is disabled
+>    - For local ASP.NET Core Identity accounts: `PasswordOptions.RequiredLength` ≥ 15 (or ≥ 8 with MFA), `RequireDigit`/`RequireUppercase`/`RequireNonAlphanumeric` = `false`, and a breached-password check (e.g. Pwned Passwords k-anonymity API)
+>
+> 3. **MFA** — Is MFA enforced for this application through a Conditional Access policy, preferably phishing-resistant (FIDO2/passkeys, Windows Hello for Business, certificate-based)?
+>    - Microsoft's mandatory MFA rollout covers Azure management portals and tooling only; it does not protect custom applications
 
 ## What to Report
 

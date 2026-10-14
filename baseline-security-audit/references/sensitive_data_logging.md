@@ -35,7 +35,7 @@ Search for log statements that may capture:
 ## 4. Common Logging Vulnerabilities
 
 - Full object serialization including sensitive properties
-- Exception logging that exposes sensitive stack traces or database internals
+- Exception messages that embed secrets or user input (e.g. `SqlException` carrying a connection string, an `ArgumentException` echoing a password) logged without redaction — full stack traces themselves are **required** in the log sink (see logging.md and exception_handling.md); the finding is sensitive values inside the message or `Exception.Data`, or stack traces reaching the HTTP response
 - Request/response logging containing sensitive headers or bodies
 - Debug logging left enabled in production
 - Structured logging with sensitive data in log context or scope
@@ -52,7 +52,7 @@ Search for log statements that may capture:
 
 - Log levels set too verbose in production (`Debug`, `Trace`)
 - Sensitive data not excluded via `[SkipLogging]` or destructuring policies
-- Global exception handlers logging full exception details
+- Global exception handlers writing exception details (message, stack trace, inner exceptions) into the HTTP response instead of only into the log
 - Application Insights or APM tools capturing sensitive request data
 - Log files stored in insecure locations
 

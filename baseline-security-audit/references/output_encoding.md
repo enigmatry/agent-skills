@@ -34,13 +34,22 @@ DomSanitizer.bypassSecurityTrust*
 
 **Angular-specific checks:**
 ```typescript
-// Unsafe patterns
-element.nativeElement.innerHTML = userContent;
-[innerHTML]="unsafeHtml"
+// Unsafe patterns (bypass Angular's sanitizer)
+element.nativeElement.innerHTML = userContent;          // direct DOM write, no sanitization
+renderer.setProperty(el, 'innerHTML', userContent);     // same
+[innerHTML]="sanitizer.bypassSecurityTrustHtml(html)"   // explicit bypass
+sanitizer.sanitize(SecurityContext.NONE, value)
 document.write(content);
+eval(userInput); new Function(userInput);
+window.location = userValue;
+
+// NOT a finding by itself: Angular sanitizes property bindings to innerHTML
+// (strips <script>, event handlers, javascript: URLs). Only flag [innerHTML]
+// when the bound value comes from a bypassSecurityTrust* call.
+[innerHTML]="userHtml"
 ```
 
-**Documentation reference:** https://angular.io/guide/security#trusting-safe-values
+**Documentation reference:** https://angular.dev/best-practices/security
 
 ## 2. Razor Views and Pages (ASP.NET)
 

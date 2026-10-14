@@ -11,7 +11,7 @@ Analyze security headers to identify missing or misconfigured values that protec
 
 | Situation | Approach |
 |-----------|----------|
-| `PRODUCTION_URL` is available | Fetch actual response headers from the live URL — this is the ground truth. Use the `fetch` tool to retrieve `HEAD` or `GET` response headers from `PRODUCTION_URL`. Base all findings on what the server actually returns. |
+| `PRODUCTION_URL` is available | Fetch actual response headers from the live URL — this is the ground truth. Use a shell command that returns raw headers: `curl -sSI -L "$PRODUCTION_URL"` (Bash) or `(Invoke-WebRequest -Uri $env:PRODUCTION_URL -Method Head -SkipHttpErrorCheck).Headers` (PowerShell 7). Do not use a page-fetching tool that converts the response to text; it drops the headers. Base all findings on what the server actually returns. |
 | `PRODUCTION_URL` is not available | Fall back to inspecting `web.config`, middleware (`Program.cs` / `Startup.cs`), and any other config files as described in the sections below. Clearly note in each finding that it is based on static analysis only. |
 
 > When using the live URL, request both the front-end root (`/`) and a known API endpoint (e.g. `/api/health` or `/swagger`) so headers for both the Angular front-end and the API backend can be assessed independently.
@@ -60,9 +60,11 @@ Analyze security headers to identify missing or misconfigured values that protec
 
 **Required directives:**
 
-**1. default-src 'none'** (MUST start with this):
-- Denies everything by default (whitelist approach)
-- Other directives explicitly allow what's needed
+**1. default-src** (MUST be present; `'none'` or `'self'`):
+- `default-src 'none'` denies everything by default and is the strictest option
+- `default-src 'self'` is the OWASP Secure Headers Project baseline and is **compliant**; do not report it as weak
+- Directive **order is irrelevant** in CSP; never flag a policy because `default-src` is not the first token
+- Flag: `default-src` missing, `default-src *`, or scheme-wide sources (`https:`, `data:`) in `default-src`
 
 **2. base-uri 'self'** (MUST include):
 - Prevents base tag injection attacks
@@ -121,7 +123,7 @@ frame-ancestors 'self';
 <add name="Content-Security-Policy" value="default-src 'self'" />
 <!-- Missing base-uri -->
 
-<!-- Not starting with default-src 'none' -->
+<!-- Missing default-src entirely -->
 <add name="Content-Security-Policy" value="script-src 'self'; style-src 'self'" />
 ```
 
@@ -516,7 +518,7 @@ app.Run();
 **Verify the application follows:**
 
 ✅ **Front-end (Angular):**
-- CSP header present, starts with `default-src 'none'`
+- CSP header present and contains `default-src 'none'` or `default-src 'self'` (order does not matter)
 - CSP includes `base-uri 'self'` and `frame-ancestors 'none'`
 - No `unsafe-inline`, `unsafe-eval`, `data:`, `blob:` in script-src
 - No `unsafe-inline` in style-src

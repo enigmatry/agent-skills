@@ -24,7 +24,7 @@ services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     {
         options.Cookie.HttpOnly = true;      // MUST be true
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;  // MUST be Always
-        options.Cookie.SameSite = SameSiteMode.Strict;  // SHOULD be Strict or Lax
+        options.Cookie.SameSite = SameSiteMode.Lax;     // Lax (the framework default) for auth cookies; Strict breaks the OIDC /signin-oidc POST callback
         options.Cookie.Name = "YourApp.Auth";
         options.ExpireTimeSpan = TimeSpan.FromHours(1);
         options.SlidingExpiration = true;
@@ -37,7 +37,7 @@ services.AddSession(options =>
 {
     options.Cookie.HttpOnly = true;          // MUST be true
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;  // MUST be Always
-    options.Cookie.SameSite = SameSiteMode.Strict;  // SHOULD be Strict or Lax
+    options.Cookie.SameSite = SameSiteMode.Lax;     // Lax for session cookies that must survive the OIDC redirect
     options.Cookie.Name = "YourApp.Session";
     options.IdleTimeout = TimeSpan.FromMinutes(30);
     options.Cookie.IsEssential = true;
@@ -48,11 +48,23 @@ services.AddSession(options =>
 ```csharp
 services.Configure<CookiePolicyOptions>(options =>
 {
-    options.HttpOnly = HttpOnlyPolicy.Always;  // MUST be Always
+    options.HttpOnly = HttpOnlyPolicy.None;      // Do NOT use Always: it makes the Angular XSRF-TOKEN cookie unreadable and silently disables CSRF protection
     options.Secure = CookieSecurePolicy.Always;  // MUST be Always
-    options.MinimumSameSitePolicy = SameSiteMode.Strict;  // SHOULD be Strict or Lax
+    options.MinimumSameSitePolicy = SameSiteMode.Lax;  // Do NOT use Strict: it overrides the SameSite=None that OIDC correlation/nonce cookies require and breaks sign-in
 });
+app.UseCookiePolicy(); // the options above only apply when this middleware is in the pipeline
 ```
+
+**Cookies that are exceptions by design (never report these):**
+
+| Cookie | Required setting | Why |
+|--------|------------------|-----|
+| `.AspNetCore.Correlation.*`, `.AspNetCore.OpenIdConnect.Nonce.*` | `SameSite=None; Secure` | Set by the OIDC handler; the IdP POSTs back cross-site. `Strict` or `Lax` produces "Correlation failed" |
+| Authentication cookie (`.AspNetCore.Cookies` / `YourApp.Auth`) | `SameSite=Lax` (framework default), `HttpOnly`, `Secure` | Must be sent on the top-level `/signin-oidc` navigation |
+| Antiforgery cookie (`.AspNetCore.Antiforgery.*`) | `SameSite=Strict`, `HttpOnly` | Framework default; same-site only |
+| `XSRF-TOKEN` (Angular `withXsrfConfiguration` / `HttpClientXsrfModule`) | **not** `HttpOnly`, `Secure`, `SameSite=Lax` or `Strict` | Angular reads it from JavaScript to send the `X-XSRF-TOKEN` header |
+
+A missing `SameSite` attribute means the browser applies `Lax`; report that as LOW "attribute not explicit", not as a CSRF vulnerability.
 
 **Required security flags:**
 - **HttpOnly = true**: Prevents JavaScript access (mitigates XSS)
@@ -292,26 +304,16 @@ localStorage.setItem('settings', JSON.stringify(settings));  // UI settings
 
 **Check for encryption usage:**
 ```typescript
-// Look for encryption libraries
-import * as CryptoJS from 'crypto-js';
-import { AES, enc } from 'crypto-js';
+// RED FLAG - crypto-js is discontinued ("no longer maintained" per its README) and
+// CVE-2023-46233 made its PBKDF2 default to SHA-1 with 1 iteration before 4.2.0.
+// Passphrase-based CryptoJS.AES.encrypt(data, 'passphrase') derives key and IV with MD5.
+import * as CryptoJS from 'crypto-js';          // MEDIUM: unmaintained dependency
+CryptoJS.AES.encrypt(data, passphrase)           // HIGH: weak key derivation
 
-// Example encrypted storage
-const encryptData = (data: string, key: string): string => {
-  return CryptoJS.AES.encrypt(data, key).toString();
-};
-
-const decryptData = (ciphertext: string, key: string): string => {
-  const bytes = CryptoJS.AES.decrypt(ciphertext, key);
-  return bytes.toString(CryptoJS.enc.Utf8);
-};
-
-// Usage
-const encrypted = encryptData(sensitiveData, encryptionKey);
-localStorage.setItem('userData', encrypted);
-
-const retrieved = localStorage.getItem('userData');
-const decrypted = decryptData(retrieved, encryptionKey);
+// ACCEPTABLE - Web Crypto API (built into every supported browser)
+const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['encrypt', 'decrypt']);
+const iv = crypto.getRandomValues(new Uint8Array(12));
+const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
 ```
 
 **Encryption considerations:**
@@ -319,13 +321,15 @@ const decrypted = decryptData(retrieved, encryptionKey);
 // BAD - Storing encryption key in code
 const ENCRYPTION_KEY = 'hardcoded-key-12345';  // Never hardcode!
 
-// BETTER - Derive key from user password or session
-const deriveKey = (password: string): string => {
-  return CryptoJS.PBKDF2(password, 'salt', {
-    keySize: 256/32,
-    iterations: 1000
-  }).toString();
-};
+// BAD - Static salt and low iteration count
+CryptoJS.PBKDF2(password, 'salt', { iterations: 1000 })
+
+// BETTER - Web Crypto PBKDF2 with a random salt and >= 600,000 iterations (SHA-256)
+const salt = crypto.getRandomValues(new Uint8Array(16));
+const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+const derived = await crypto.subtle.deriveKey(
+  { name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' },
+  baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 
 // NOTE: Client-side encryption provides limited security
 // If data is truly sensitive, store server-side instead
@@ -399,7 +403,7 @@ Finding: Unencrypted Email Address in Local Storage
 - Risk: MEDIUM - Email exposed to XSS attacks, browser extensions
 - Recommendation: 
   1. PRIMARY: Fetch email from server when needed (don't store)
-  2. ALTERNATIVE: Encrypt with CryptoJS before storing
+  2. ALTERNATIVE: Encrypt with the Web Crypto API (AES-GCM) before storing; never crypto-js
   3. BETTER: Use server-side session with HttpOnly cookie
 ```
 
@@ -443,20 +447,21 @@ SameSite = SameSiteMode.None, Secure = true
 ```
 
 **Recommendations:**
-- **Authentication/Session cookies**: Use `Strict` or `Lax`
-- **CSRF protection**: `Strict` or `Lax` provides protection
-- **Third-party contexts**: Use `None` with `Secure = true` (only if necessary)
-- **Default**: `Lax` is a good default for most cookies
+- **Authentication/Session cookies**: Use `Lax` (the ASP.NET Core default); `Strict` breaks OpenID Connect sign-in with Entra ID
+- **Antiforgery cookie**: `Strict` (framework default)
+- **OIDC correlation and nonce cookies**: `None` with `Secure = true`; never flag these
+- **Third-party contexts (iframes)**: Use `None` with `Secure = true` and add the CHIPS `Partitioned` attribute via `options.Extensions.Add("Partitioned")`
+- **Default**: `Lax` is the right default for most cookies
 
 ## 11. Best Practices Verification
 
 **Verify that the application follows these practices:**
 
 ✅ **Cookie security:**
-- All cookies have `HttpOnly = true` (except client-side preference cookies)
-- All cookies have `Secure = true` (require HTTPS)
+- All cookies have `HttpOnly = true` except cookies that are JavaScript-readable by design (`XSRF-TOKEN`, client-side preference cookies)
+- All cookies have `Secure = true` (require HTTPS); `UseForwardedHeaders` is configured behind Front Door or Application Gateway so `CookieSecurePolicy` sees HTTPS
 - All cookies have appropriate `SameSite` setting
-- Authentication cookies use `SameSite = Strict` or `Lax`
+- Authentication cookies use `SameSite = Lax`; OIDC correlation/nonce cookies use `None; Secure`
 - Cookie names don't reveal sensitive information
 - Cookies have appropriate expiration times
 

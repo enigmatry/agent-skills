@@ -23,7 +23,12 @@ public string CreditCardNumber { get; set; }
 public string BankAccountNumber { get; set; }
 public string IBAN { get; set; }
 public string RoutingNumber { get; set; }
-public string CardVerificationCode { get; set; }
+public string CardVerificationCode { get; set; }   // CRITICAL: must NOT be stored at all (see note below)
+
+// NOTE: PCI DSS v4.0.1 requirement 3.3.1 forbids storing sensitive authentication data
+// (CVV/CVC, full track data, PIN) after authorisation, even encrypted. A CVV column is a
+// CRITICAL "remove" finding, not an encryption finding. Full PANs should be tokenised via
+// the payment service provider rather than stored.
 
 // Medical and biometric data
 public string MedicalRecordNumber { get; set; }

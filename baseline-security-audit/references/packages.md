@@ -37,6 +37,22 @@ Scan the codebase for packages with known security vulnerabilities, deprecated p
 - Packages officially deprecated by maintainers
 - Packages with no recent updates (>2 years)
 - Packages targeting end-of-life frameworks (.NET Framework versions, Node.js versions)
+
+**Runtime end-of-life (verify against endoflife.date at audit time; status as of October 2026):**
+
+| Runtime | Status | Where to check |
+|---------|--------|----------------|
+| .NET 6, .NET 7 | End of life | `<TargetFramework>` in `*.csproj`, `global.json`, `UseDotNet@2` in pipelines |
+| .NET 8 (LTS) and .NET 9 (STS) | Both end support on **10 November 2026** — flag as HIGH if no migration to .NET 10 is planned | same |
+| .NET 10 (LTS) | Supported until November 2028 — target version | same |
+| Node.js 18, 20 | End of life (Node 20 ended 30 April 2026) | `engines.node` in `package.json`, `.nvmrc`, `NodeTool@0` / `UseNode@1` in pipelines |
+| Node.js 22 | Maintenance until April 2027 | same |
+| Node.js 24 | Active LTS — target version | same |
+| Angular ≤ 19 | End of life (Angular 19 ended 19 May 2026) | `@angular/core` in `package.json` |
+| Angular 20 | LTS until 28 November 2026 | same |
+| Angular 21, 22 | Supported | same |
+
+Sources: https://dotnet.microsoft.com/platform/support/policy/dotnet-core , https://endoflife.date/nodejs , https://endoflife.date/angular
 - Packages with successor/replacement packages available
 - Packages with maintenance mode warnings
 
@@ -71,23 +87,27 @@ npm outdated
 ## 6. Risk Assessment Criteria
 **Categorize findings by risk level:**
 
+Use the NVD CVSS severity bands as reported by the advisory; do not shift them up.
+
 **CRITICAL (Immediate action required):**
-- Known exploits in the wild
-- Critical/High CVSS scores (>7.0)
-- Authentication/RCE vulnerabilities
-- No available patches/updates
+- CVSS 9.0–10.0
+- Known exploits in the wild (any CVSS)
+- Unauthenticated RCE or authentication bypass (any CVSS)
 
 **HIGH (Address soon):**
-- Medium CVSS scores (4.0-7.0)
+- CVSS 7.0–8.9
 - Deprecated packages with security implications
-- Significantly outdated packages (>2 major versions)
-- Framework compatibility issues
+- Packages targeting an end-of-life runtime (see section 3)
 
 **MEDIUM (Plan for update):**
-- Low CVSS scores (<4.0)
-- Minor version updates available
+- CVSS 4.0–6.9
+- Significantly outdated packages (>2 major versions behind)
 - Non-security deprecation warnings
-- Performance/feature improvements available
+
+**LOW (Monitor):**
+- CVSS 0.1–3.9
+
+Not findings: minor or patch updates available, pre-release versions available, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
 
 **LOW (Monitor):**
 - Pre-release updates available

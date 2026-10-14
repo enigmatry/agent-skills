@@ -60,10 +60,18 @@ CA5397  — Do not use deprecated SslProtocols values
 CA3001–CA3147 — Various injection and XSS risks
 ```
 
+**The CA security rules above are OFF by default.** They only run when the project enables them. A clean build log proves nothing unless one of these is present:
+- `<AnalysisMode>All</AnalysisMode>` or `<AnalysisModeSecurity>All</AnalysisModeSecurity>` in the `.csproj` or `Directory.Build.props`
+- `dotnet_analyzer_diagnostic.category-Security.severity = warning` (or `error`) in `.editorconfig`
+- `<EnableNETAnalyzers>true</EnableNETAnalyzers>` with a matching `<AnalysisLevel>`
+
+Report "security analyzers not enabled" as a MEDIUM finding when none of these is configured.
+
 **RED FLAGS:**
-- Build warnings suppressed in bulk via `<NoWarn>` without justification
-- `<TreatWarningsAsErrors>` set to `false` or absent, meaning security analyser warnings are silent
+- Build warnings suppressed in bulk via `<NoWarn>` without justification, or `<NoWarn>` containing `CA2100`, `CA5xxx` or `NU1901`–`NU1904`
+- `<WarningsAsErrors>` does not include `NU1903;NU1904` (vulnerable packages should fail CI); note that `<WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>` next to `TreatWarningsAsErrors=true` is Microsoft's recommended pattern and not a red flag
 - Vulnerability advisories present in restore output but not acted on
+- `NU1900` or `NU1905` in the restore output: the audit could not run (no vulnerability data source configured), which is itself a finding
 
 ## 3. SonarQube — Security Ratings (Overall Code)
 
@@ -76,22 +84,23 @@ Navigate to the project in SonarQube or SonarCloud and check the **Overall Code*
 | **Vulnerabilities** | **A** | Report as security finding |
 | **Security Hotspots Reviewed** | **A** | Report as security finding |
 
-**SonarQube rating scale:**
-- **A** — 0 vulnerabilities / 100% hotspots reviewed
-- **B** — at least 1 minor vulnerability
-- **C** — at least 1 major vulnerability
-- **D** — at least 1 critical vulnerability
-- **E** — at least 1 blocker vulnerability
+**SonarQube rating scales** (SonarQube Server/Cloud, Multi-Quality Rule mode is the default):
+- **Security rating** (`security_rating` / `software_quality_security_rating`): **A** = no open Security issues; **B** = at least one Low; **C** = at least one Medium; **D** = at least one High; **E** = at least one Blocker
+- **Security Review rating** (`security_review_rating`, hotspots reviewed): **A** ≥ 80%; **B** ≥ 70%; **C** ≥ 50%; **D** ≥ 30%; **E** < 30%
 
-**For each open Vulnerability or unreviewed Security Hotspot, note:**
-- Rule ID and description (e.g. `java:S2076 — OS command injection`)
+> **Security Hotspots are deprecated.** SonarQube Server 2026.4 and later (and SonarQube Cloud) fold hotspots into Security issues. If `security_review_rating` or the hotspots endpoint is absent, rely on the Security rating and the Security issues list alone and do not report "hotspots not reviewed".
+
+Use the MCP tools when available: `get_project_quality_gate_status`, `get_component_measures` (metrics `security_rating`, `new_security_rating`, `security_review_rating`, `vulnerabilities`), `search_sonar_issues_in_projects` (Security impact), `search_security_hotspots`. Resolve the project key from `.sonarlint/connectedMode.json`, `sonar.projectKey`, or the `projectKey` in the pipeline task.
+
+**For each open Security issue (or unreviewed Security Hotspot on older servers), note:**
+- Rule ID and description (e.g. `csharpsquid:S2076 — OS command injection`)
 - Affected file and line number
 - Severity as reported by SonarQube
 
 **RED FLAGS:**
-- Vulnerabilities rating below A on Overall Code
-- Security Hotspots rating below A (unreviewed hotspots)
-- Quality gate set to "None" or a custom gate that does not enforce security ratings
+- Security rating below A on Overall Code
+- Security Review rating below A (fewer than 80% of hotspots reviewed) on servers that still have hotspots
+- Quality gate without a security condition (Security rating on New Code or Overall Code), or a pipeline that does not wait for the gate (`SonarQubePublish` without `pollingTimeoutSec`, or Sonar tasks with `continueOnError: true`)
 
 ## 4. SonarQube — Code Quality (Technical Debt)
 
