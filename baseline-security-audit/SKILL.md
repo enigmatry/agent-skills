@@ -1,6 +1,10 @@
 ---
 name: baseline-security-audit
 description: Ensures baseline security practices are followed in the project. Use this when asked to perform a security audit on the codebase. Can create Jira stories for selected security findings.
+compatibility: Designed for Claude Code or similar agents. Requires an Atlassian Jira MCP server for story creation, a SonarQube MCP server for the Code Quality check, and internet access for the Security Headers, SSL/TLS and Package Security checks.
+metadata:
+  author: enigmatry
+  version: "2.0"
 ---
 
 # Baseline Security Audit Skill
@@ -14,75 +18,75 @@ This skill performs a comprehensive baseline security audit of the codebase by a
 This skill performs the following security checks (each with detailed guidance in the references folder):
 
 1. **Secrets Management** - Scans for hardcoded secrets, credentials, and API keys
-   - *See: references/secrets.md*
+   - See [references/secrets.md](references/secrets.md)
 
 2. **Package Security** - Checks for insecure dependencies and outdated packages with known vulnerabilities
-   - *See: references/packages.md*
+   - See [references/packages.md](references/packages.md)
 
 3. **SQL Injection** - Identifies potential SQL injection vulnerabilities in database queries
-   - *See: references/sql_injection.md*
+   - See [references/sql_injection.md](references/sql_injection.md)
 
 4. **Exception Handling** - Reviews error handling patterns to prevent information disclosure
-   - *See: references/exception_handling.md*
+   - See [references/exception_handling.md](references/exception_handling.md)
 
 5. **Logging Security** - Validates logging practices and checks for sensitive data in logs
-   - *See: references/logging.md*
+   - See [references/logging.md](references/logging.md)
 
 6. **Sensitive Data in Logs** - Identifies logging of passwords, tokens, and other sensitive information
-   - *See: references/sensitive_data_logging.md*
+   - See [references/sensitive_data_logging.md](references/sensitive_data_logging.md)
 
 7. **Sensitive Query Strings** - Checks for sensitive data exposure in URL query parameters
-   - *See: references/sensitive_query_strings.md*
+   - See [references/sensitive_query_strings.md](references/sensitive_query_strings.md)
 
 8. **IDOR (Insecure Direct Object References)** - Analyzes authorization checks for object access
-   - *See: references/idor.md*
+   - See [references/idor.md](references/idor.md)
 
 9. **Output Encoding** - Validates proper encoding to prevent XSS attacks
-   - *See: references/output_encoding.md*
+   - See [references/output_encoding.md](references/output_encoding.md)
 
 10. **Input Validation** - Ensures all user input is validated server-side and client-side
-    - *See: references/input_validation.md*
+    - See [references/input_validation.md](references/input_validation.md)
 
 11. **Code Minification** - Verifies production builds are minified and source maps are secured
-    - *See: references/code_minification.md*
+    - See [references/code_minification.md](references/code_minification.md)
 
 12. **Environment Credentials** - Ensures different credentials per environment (dev/test/staging/prod)
-    - *See: references/environment_credentials.md*
+    - See [references/environment_credentials.md](references/environment_credentials.md)
 
 13. **Data Minimization** - Identifies unnecessary storage of sensitive/personal data (GDPR compliance)
-    - *See: references/data_minimization.md*
+    - See [references/data_minimization.md](references/data_minimization.md)
 
 14. **Data Storage Minimization** - Reviews database entities for minimal sensitive data storage
-    - *See: references/data_storage_minimization.md*
+    - See [references/data_storage_minimization.md](references/data_storage_minimization.md)
 
 15. **Cookie and Storage Security** - Validates secure cookie configuration and localStorage usage
-    - *See: references/cookie_storage_security.md*
+    - See [references/cookie_storage_security.md](references/cookie_storage_security.md)
 
 16. **Cryptography Security** - Ensures strong cryptographic algorithms for hashing and encryption
-    - *See: references/cryptography_security.md*
+    - See [references/cryptography_security.md](references/cryptography_security.md)
 
 17. **Security Headers** - Checks proper configuration of CSP, HSTS, X-Frame-Options, and other security headers
-    - *See: references/security_headers.md*
+    - See [references/security_headers.md](references/security_headers.md)
     - **Note**: Uses `PRODUCTION_URL` collected at the start of the audit. If empty, skip live analysis and note it in the findings.
 
 18. **Version Info Headers** - Prevents disclosure of platform/version information in HTTP headers
-    - *See: references/version_info_headers.md*
+    - See [references/version_info_headers.md](references/version_info_headers.md)
 
 19. **HTTP Verb Whitelisting** - Ensures only necessary HTTP verbs are allowed, blocks unused methods
-    - *See: references/http_verb_whitelisting.md*
+    - See [references/http_verb_whitelisting.md](references/http_verb_whitelisting.md)
 
 20. **SSL/TLS Configuration** - Validates SSL/TLS protocol versions and cipher suites using SSL Labs analysis
-    - *See: references/ssl_tls_configuration.md*
+    - See [references/ssl_tls_configuration.md](references/ssl_tls_configuration.md)
     - **Note**: Uses `PRODUCTION_URL` collected at the start of the audit. If empty, skip live analysis and note it in the findings.
 
 21. **Database Field Encryption** - Verifies that sensitive fields (SSN, credit card numbers, bank account details, etc.) are encrypted at the column or application level so they are unreadable with direct database access
-    - *See: references/database_field_encryption.md*
+    - See [references/database_field_encryption.md](references/database_field_encryption.md)
 
 22. **Code Quality** - Reviews build pipeline warnings for security-related issues and checks SonarQube for vulnerability and security hotspot ratings
-    - *See: references/code_quality.md*
+    - See [references/code_quality.md](references/code_quality.md)
 
 23. **Authentication Security** - Verifies that a standard authentication protocol (OpenID Connect, Authorization Code + PKCE) is used, all API endpoints require authorization by default, Swagger is restricted to Development, and token lifetime and password policies meet minimum requirements
-    - *See: references/authentication_security.md*
+    - See [references/authentication_security.md](references/authentication_security.md)
 
 Each check provides:
 - Specific patterns to search for
