@@ -20,9 +20,9 @@ Analyze the production application's SSL/TLS configuration to identify weak prot
 
 **How to Test**:
 
-**(a) SSL Labs API v4** — needs a one-time organisation registration (API registration from https://www.ssllabs.com/ssltest/, i.e. `POST https://api.ssllabs.com/api/v4/register` with first name, last name, organization and email); the registered email goes in the `email` header of every call:
+**(a) SSL Labs API v4** — Enigmatry is registered for the API; send `support@enigmatry.com` in the `email` header of every call.
 ```bash
-curl -s -H "email: $SSLLABS_EMAIL" "https://api.ssllabs.com/api/v4/analyze?host=<host>&publish=off&all=done"
+curl -s -H "email: support@enigmatry.com" "https://api.ssllabs.com/api/v4/analyze?host=<host>&publish=off&all=done"
 # add &startNew=on to the first call for a fresh assessment, then repeat the call without it every 10-30 s until "status" is "READY" (or "ERROR")
 ```
 Read `endpoints[].grade` and `endpoints[].details`: `protocols` (section 2), `suites` (section 3), `cert` / `certChains` (section 4), `hstsPolicy` (section 8), `namedGroups` (X25519MLKEM768 present = post-quantum hybrid key exchange offered, section 12) and the vulnerability fields (`poodle`, `heartbleed`, `freak`, `logjam`, `drownVulnerable`, section 7).

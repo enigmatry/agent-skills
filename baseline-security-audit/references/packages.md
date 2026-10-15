@@ -73,7 +73,6 @@ Sources: https://dotnet.microsoft.com/platform/support/policy/dotnet-core , http
 # ⚠️ ALWAYS include --include-transitive — direct-package scans miss the majority of real-world CVEs
 dotnet package list --vulnerable --include-transitive --format json
 dotnet package list --deprecated --include-transitive --format json
-dotnet package update --vulnerable   # NuGet 7 / .NET 10 SDK: moves every vulnerable package to a fixed version
 dotnet nuget why <package>           # shows the transitive path that pulls a flagged package in
 # Source: https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-10/sdk
 
@@ -87,9 +86,6 @@ npm outdated
 # - OWASP Dependency Check
 # - WhiteSource/Mend
 # - GitHub Dependabot alerts
-# - GitHub Code Security for Azure DevOps: AdvancedSecurity-Dependency-Scanning@1 pipeline task
-#   (Advanced Security split into Code Security and Secret Protection in June 2025;
-#   https://devblogs.microsoft.com/devops/github-secret-protection-and-github-code-security-for-azure-devops/)
 ```
 
 ### NuGetAudit configuration review
@@ -135,11 +131,6 @@ After the September 2025 chalk/debug compromise and the Shai-Hulud worm, npm rev
 Findings: no lockfile or `npm install` in CI = High; lifecycle scripts not blocked = Medium; no `min-release-age` or no `npm audit signatures` = Low.
 Sources: https://github.com/orgs/community/discussions/179562 , https://www.infoq.com/news/2026/08/npm-12-released/ , https://semgrep.dev/blog/2025/chalk-debug-and-color-on-npm-compromised-in-new-supply-chain-attack
 
-### SBOM (Low, informational)
-
-Check that the pipeline produces a software bill of materials: `npm sbom --sbom-format cyclonedx`, `dotnet CycloneDX` or `Microsoft.Sbom.Tool` (`sbom-tool generate`). Under the EU Cyber Resilience Act the 24-hour vulnerability-reporting duties apply since 11 September 2026 and the SBOM and vulnerability-handling obligations from 11 December 2027 for products with digital elements; custom-built and SaaS software may be out of scope, so report a missing SBOM as Low and informational.
-Source: https://www.jonesday.com/en/insights/2026/07/eu-cyber-resilience-act-24hour-reporting-duties-start-september-11-2026
-
 ## 6. Risk Assessment Criteria
 **Categorize findings by risk level:**
 
@@ -165,7 +156,7 @@ Use the NVD CVSS severity bands as reported by the advisory; do not shift them u
 
 **Low (monitor):**
 - CVSS 0.1–3.9
-- `NuGetAuditSuppress` without a justification comment; private feed without `<packageSourceMapping>`; no `min-release-age`; no `npm audit signatures`; no SBOM produced (section 5)
+- `NuGetAuditSuppress` without a justification comment; private feed without `<packageSourceMapping>`; no `min-release-age`; no `npm audit signatures` (section 5)
 
 Not findings: minor or patch updates available, pre-release versions available, documentation-only or feature-only updates, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
 

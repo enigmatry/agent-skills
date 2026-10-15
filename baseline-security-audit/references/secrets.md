@@ -19,8 +19,6 @@ Analyze the codebase to identify hardcoded secrets, credentials, and sensitive c
 
 Committed values like these in `appsettings*.json`, `environment.ts` or pipeline variables are **not** a Secrets Management finding. Only report them when a credential is committed alongside them — a `ClientSecret`, certificate/private key, password, or a connection string with embedded credentials — and in that case report the credential, not the identifier. When one of these identifiers is reused across environments, report it once as a **Low** hygiene finding (separate app registrations and telemetry resources per environment are good practice), never as credential reuse.
 
-**Application Insights modernization note:** instrumentation-key-only ingestion has been unsupported since 31 March 2025. An `ApplicationInsights:InstrumentationKey` (or `APPINSIGHTS_INSTRUMENTATIONKEY`) setting with no `ConnectionString` (`APPLICATIONINSIGHTS_CONNECTION_STRING`) alongside it means telemetry still goes through the retired path; report it once as a Low modernization note, not as a secret finding. Source: https://azure.microsoft.com/updates/technical-support-for-instrumentation-key-based-global-ingestion-in-application-insights-will-end-on-31-march-2025
-
 ## 1. Hardcoded Secrets Detection
 
 **Search for common secret patterns in all files:**
@@ -234,9 +232,7 @@ gitleaks git . --redact --report-format json --report-path gitleaks-history.json
 gitleaks dir . --redact                                                            # working tree
 # `gitleaks detect` / `gitleaks protect` are deprecated since gitleaks 8.19
 ```
-
-**Secret-scanning controls (positive check):** record which of these are in place — GitHub Secret Protection for Azure DevOps with push protection enabled (split from Advanced Security in June 2025), a gitleaks pre-commit hook (`.pre-commit-config.yaml` referencing `gitleaks/gitleaks`, or a Husky hook), and `<UserSecretsId>` in the `*.csproj` as evidence that developers keep local credentials in `dotnet user-secrets`. Absence of any secret scanning = Low.
-Sources: https://devblogs.microsoft.com/devops/github-secret-protection-and-github-code-security-for-azure-devops/ , https://github.com/gitleaks/gitleaks
+Source: https://github.com/gitleaks/gitleaks
 
 ## 8. Credential Separation per Environment
 
@@ -380,8 +376,6 @@ export const environment = {
 - Shared `ApiKey` values
 - Same `StorageAccountName` (should be globally unique per environment)
 
-**Service connections:** the Azure Resource Manager service connections the pipeline references (`azureSubscription:` on `AzureCLI@2`, `AzureWebApp@1`, `AzureRmWebAppDeployment@5`, `AzureResourceManagerTemplateDeployment@3` and similar) should authenticate with workload identity federation, not a service principal secret. Check Project Settings > Service connections (or ask the user) for the authentication method of each connection; a connection with a stored secret ("Service principal (manual)" or "(automatic)" with a secret) = Medium, remediated by converting it to workload identity federation. Source: https://devblogs.microsoft.com/devops/retirement-of-azure-devops-issuer-in-workload-identity-federation-service-connections/
-
 ### Deployment profiles
 
 **Files to examine:**
@@ -432,8 +426,7 @@ For each finding, provide:
 
 ### Configuration and tooling
 
-- **Medium**: `ClientSecret` used where managed identity or federated identity is possible (section 8 remediation); an Azure DevOps service connection with a stored service principal secret (section 8, pipeline variable files); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
-- **Low**: no secret-scanning control at all (section 7); Application Insights `InstrumentationKey` without a `ConnectionString` (Not a Finding: Public Identifiers)
+- **Medium**: `ClientSecret` used where managed identity or federated identity is possible (section 8 remediation); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
 
 ### Credential reuse across environments
 
