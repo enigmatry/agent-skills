@@ -2,6 +2,9 @@
 
 Scan the codebase for sensitive data being transmitted in URL query parameters, which exposes that data in server logs, browser history, proxy logs, and referrer headers.
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A04 Cryptographic Failures (data exposure) · **ASVS 5.0:** V14 Data Protection
+
 ## Core Security Principle
 **Sensitive data must never be placed in URL query parameters. Authentication tokens, credentials, and PII must be transmitted in request headers or the request body using POST over HTTPS.**
 
@@ -9,10 +12,12 @@ Scan the codebase for sensitive data being transmitted in URL query parameters, 
 
 Search for query parameters that carry:
 - API keys, tokens, or secrets
-- User IDs, session IDs, or authentication tokens
+- Session IDs or authentication tokens
 - Passwords, PINs, or security codes
 - JWT or bearer tokens
-- OAuth tokens, refresh tokens, or authorization codes
+- OAuth access or refresh tokens
+
+Not findings: opaque ids and REST path ids (`/users/{id}`). See check 7 (idor.md) for a sequential id that the server trusts for authorization without an ownership check. The OAuth `?code=` on the redirect URI is by design: flag only an authorization code written to logs. See check 19 (authentication_security.md) for a missing PKCE.
 
 ## 2. Personal Identifiable Information (PII) in URLs
 
@@ -36,22 +41,25 @@ Search for query parameters that carry:
 
 - URLs constructed with string concatenation including sensitive data
 - Query parameters named `?password=`, `?token=`, `?secret=`, or `?key=`
+  A password-reset link with `?token=` is the OWASP-recommended pattern; the finding there is a token that is not single-use or does not expire, or a reset page that loads third-party resources without `Referrer-Policy: no-referrer`
 - Redirect URLs containing sensitive information
 - Debug or diagnostic URLs exposing internal state
 - Search parameters that leak private data
 
 ## 5. Framework-Specific Checks
 
-- **ASP.NET Core**: Query string parameters in controller actions
-- **URL generation**: `Url.Action()` or `Html.ActionLink()` passing sensitive data
-- **Redirect methods**: `RedirectToAction()` with sensitive parameters
-- **Forms**: `method="GET"` on forms that submit sensitive fields
-- **AJAX**: JavaScript constructing GET requests with sensitive data
+- **ASP.NET Core**: `[FromQuery]` parameters on controller actions that bind tokens, passwords or PII
+- **Redirect methods**: `Redirect()`, `LocalRedirect()` or `RedirectToAction()` with sensitive route values
+- **Angular `HttpParams`**: `new HttpParams().set('token', ...)` or `{ params: { email } }` on `HttpClient.get`
+- **Angular router**: `router.navigate([...], { queryParams: { token, email } })` and `[queryParams]` bindings in templates
+- **Template-literal URLs**: `${baseUrl}/export?token=${token}` built in services
+- **Downloads**: `window.open(url)` or `<a [href]>` with a token or SAS signature appended for file downloads instead of an authenticated `HttpClient` blob request
+- **Legacy (.NET Framework MVC / Razor), not expected on this stack**: `Url.Action()`, `Html.ActionLink()`, `method="GET"` forms
 
 ## 6. HTTP Method and Exposure Risks
 
 - GET requests that should use POST for sensitive operations
-- Form submissions with `method="GET"` containing sensitive fields
+- Angular reactive forms submitted with `HttpClient.get` and form values as params (legacy Razor `method="GET"` forms are not expected on this stack)
 - Links or redirects that expose sensitive data via referrer headers
 - Bookmarkable or shareable URLs containing private information
 
@@ -62,11 +70,28 @@ Search for query parameters that carry:
 - Analytics tools tracking URLs with private information
 - CDN or proxy logs capturing sensitive query parameters
 
+## 8. Files and Search Patterns
+
+**Files to examine:**
+- `*.service.ts`, `*.component.ts`, `*.interceptor.ts` — Angular URL and param construction
+- `*Controller.cs`, `*Client.cs` — `[FromQuery]` binding and outbound URLs
+- `*.http` — request files that document the real URLs
+
+**Search patterns:**
+```regex
+[?&](token|access_token|api[_-]?key|apikey|secret|password|pwd|sig|sas)=
+HttpParams\(\)[^;]*\.set\(['"](token|password|email|bsn|ssn)
+queryParams:\s*\{[^}]*(token|email|password)
+window\.open\([^)]*(token|access_token)
+\$\{[^}]*(token|password)[^}]*\}                  // inside a URL template literal
+\[FromQuery\][^,)]*(token|password|email|bsn|ssn)
+```
+
 ## What to Report
 
 For each finding, provide:
 - **File** and line number
 - **Code snippet** showing the URL or query string construction
 - **Data type** being exposed (credential, PII, etc.)
-- **Risk**: HIGH (passwords, tokens, SSN) / MEDIUM (email, user IDs, personal data) / LOW (internal identifiers with limited exposure)
+- **Severity**: High (bearer or API tokens, passwords, session ids or SAS signatures in URLs built by the application) / Medium (PII such as email, BSN or date of birth in query strings) / Low (everything else, e.g. internal identifiers with limited exposure). Opaque or REST path ids are not findings
 - **Recommendation**: use POST body, request headers, or server-side session storage instead

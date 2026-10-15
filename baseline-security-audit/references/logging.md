@@ -1,15 +1,20 @@
 # Logging Security Analysis
 
-Analyze the codebase to verify that logging practices meet security requirements: unhandled exceptions are captured with full stack traces, console output is gated behind a debug flag, and security-relevant events are written to a dedicated audit log.
+Analyze the codebase to verify that logging practices meet security requirements: unhandled exceptions are captured with full stack traces, console output is gated behind a debug flag, security-relevant events are written to a dedicated audit log, and no credentials, tokens, PII or other confidential values are written to log output.
+
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A09 Security Logging and Alerting Failures · **ASVS 5.0:** V16 Security Logging and Error Handling, V14 Data Protection
 
 ## Core Security Principle
-**Logging must ensure all errors are captured for debugging while keeping sensitive details out of user-facing responses. Security events must be auditable and separated from general application logs.**
+**Logging must ensure all errors are captured for debugging while keeping sensitive details out of user-facing responses. Security events must be auditable and separated from general application logs. Sensitive data — including credentials, tokens, PII, and financial information — must never appear in log output: log statements must record what happened without recording the sensitive values involved.**
 
 ## 1. Unhandled Exception Logging
 
 Verify that all unhandled exceptions are captured and logged with complete stack traces.
 
-> Full stack traces in the **log sink** are required and are not a sensitive-data finding. What sensitive_data_logging.md flags is sensitive values inside exception messages (connection strings, tokens, user input) and exception details that reach the **HTTP response**. Do not report the same handler under both checks.
+> Full stack traces in the **log sink** are required and are not a sensitive-data finding. What section 4 flags is sensitive values inside exception messages (connection strings, tokens, user input) and exception details that reach the **HTTP response**. Do not report the same handler under both sections.
+
+See check 4 (exception_handling.md) for whether a global handler exists and for exception details in HTTP responses. This check reports only the sink side: exceptions that reach no configured sink, or `LogError(message)` calls that drop the exception object. Severity when exceptions are not logged at all = High.
 
 **Check for:**
 - Global exception handling middleware (`UseExceptionHandler`, custom middleware)
@@ -41,6 +46,9 @@ Verify that application logs are only written to the console when the Debug log 
 - `"WriteTo"` with Console sink
 - `"MinimumLevel"` settings for console logging
 - `AddConsole()` method calls
+- `"Microsoft"`, `"Microsoft.AspNetCore"`, `"Microsoft.EntityFrameworkCore"` or `"System"` categories left at `Information` or lower in `appsettings.json` / `appsettings.Production.json` (framework noise and SQL text in production logs)
+
+Severity: console the only sink in production, or framework categories at `Information` or lower in production = Medium; no correlation id (`HttpContext.TraceIdentifier`, `Activity.Current.Id`, Serilog `{CorrelationId}` / `{TraceId}`) in the output template = Low.
 
 ## 3. Audit Log Separation
 
@@ -52,6 +60,8 @@ Verify that security-relevant events are written to a dedicated audit log, separ
 - Organisation or tenant changes
 - Permission modifications
 
+Audit records MUST contain the acting user's id, UPN or email as the actor, together with the timestamp, action, target and outcome (section 4 explains why the actor identifier is not a sensitive-data finding). Severity when authentication, authorization or privileged actions (role, permission, tenant changes) are not audited = High; audit events written only to the general application log with no separate sink or category = Medium.
+
 **Check for:**
 - Separate audit log file or logging provider configuration
 - Dedicated audit logger instances or named categories
@@ -62,16 +72,119 @@ Verify that security-relevant events are written to a dedicated audit log, separ
 
 **Search patterns:**
 - Separate log file paths containing `audit`
-- Authentication event handlers: `OnAuthenticationFailed`, `OnSignIn`, `OnSignOut`
+- Authentication event handlers: `OnSignedIn`, `OnSigningIn`, `OnSigningOut` (`CookieAuthenticationEvents`); `OnTokenValidated`, `OnAuthenticationFailed` (`JwtBearerEvents` / `OpenIdConnectEvents`)
 - User change events: email changes, role assignments, organisation updates
 - Domain events or audit event handlers
 - Dedicated audit logging categories or contexts
 
+## 4. Sensitive Data in Logs
+
+Scan the codebase for sensitive data being written to logs, which could expose credentials, PII, or other confidential information through log files and aggregation systems.
+
+### 4.1 Authentication and Credential Logging
+
+Search for log statements that may capture:
+- Passwords, PINs, or security codes
+- API keys, tokens, or secrets
+- Session IDs, authentication tokens, or bearer tokens
+- JWT tokens, OAuth tokens, or refresh tokens
+- Database credentials, connection strings, or certificates
+
+### 4.2 Personal Identifiable Information (PII) Logging
+
+Search for log statements that may capture:
+- Social Security Numbers, tax IDs, or national identifiers
+- Credit card numbers, bank account details, or payment information
+- Email addresses, phone numbers, or personal contact details
+- Names, addresses, or demographic data
+- Medical records, health information, or biometric data
+
+An actor identifier (user id, UPN, email or display name of the user performing the action) in an audit or application log is the required audit actor (section 3), not a finding. Flag name, email or phone only when logged as *payload* (the changed value, the full profile object, the request body).
+
+### 4.3 Business Sensitive Data Logging
+
+Search for log statements that may capture:
+- Full customer records or transaction payloads (card data, bank details, amounts tied to a named person)
+- Proprietary business logic or trade secrets
+- Internal system configurations or infrastructure details (connection strings, credentials, internal hostnames)
+
+Order ids, customer ids, counts and performance or usage metrics are not findings.
+
+### 4.4 Common Logging Vulnerabilities
+
+- Full object serialization including sensitive properties
+- Exception messages that embed secrets or user input (e.g. `SqlException` carrying a connection string, an `ArgumentException` echoing a password) logged without redaction — full stack traces themselves are **required** in the log sink (section 1); the finding is sensitive values inside the message or `Exception.Data`, or stack traces reaching the HTTP response
+- Request/response logging containing sensitive headers or bodies
+- Debug logging left enabled in production (section 2)
+- Structured logging with sensitive data in log context or scope
+
+### 4.5 Framework-Specific Checks
+
+- **ASP.NET Core**: Request logging middleware exposing sensitive parameters
+- **Serilog/NLog**: Structured logging with sensitive properties in log context
+- **Entity Framework**: SQL query logging with sensitive parameter values (`EnableSensitiveDataLogging()` outside Development)
+- **HTTP client logging**: Authorization headers or request bodies
+- **Custom loggers**: Application-specific logging implementations
+
+### 4.6 Logging Configuration Issues
+
+- Sensitive data not excluded via `[LogProperties]` / `[LogPropertyIgnore]` (`Microsoft.Extensions.Telemetry`), `Microsoft.Extensions.Compliance` redaction (`AddRedaction()`, `[DataClassification]` attributes) or Serilog `Destructurama.Attributed` `[NotLogged]`
+- Application Insights or APM tools capturing sensitive request data
+- Log files stored in insecure locations
+
+See check 6 (sensitive_query_strings.md) for query-string values in access logs.
+
+### 4.7 Data Masking and Redaction Gaps
+
+- No masking for sensitive fields before logging
+- Inconsistent redaction patterns across the application
+- Sensitive data in plain text in log outputs
+- Missing sanitization before logging user inputs
+
+### 4.8 Compliance and Regulatory Concerns
+
+- GDPR violations through excessive personal data logging
+- PCI DSS violations with payment card data in logs
+- HIPAA violations with health information in logs
+- Financial regulation requirements not met through transaction logging
+
+## 5. Files and Search Patterns
+
+**Files to examine:**
+- `appsettings*.json`, `Program.cs`, `Startup.cs` — logging, HTTP logging and EF configuration
+- `*Behaviour.cs` / `*Behavior.cs`, `*Middleware.cs`, `*Interceptor.cs`, `*Filter.cs` — request/response and pipeline logging
+- `azure-pipelines*.yml` — pipeline steps that echo secrets or set `System.Debug`
+- `environment*.ts`, `*.interceptor.ts` — Angular `console.log` of tokens or responses
+
+**Search patterns:**
+```regex
+Log(Information|Debug|Trace|Warning|Error|Critical)\(.*\b(password|pwd|secret|token|authorization|bearer|connectionstring|iban|bsn|ssn|creditcard|cvv)\b
+\{@\w+\}                                           // Serilog destructuring of a whole object
+EnableSensitiveDataLogging
+ShowPII\s*=\s*true                                   // IdentityModelEventSource
+HttpLoggingFields\.(All|RequestBody|ResponseBody|RequestQuery)
+LogContext\.PushProperty\(                           // sensitive value pushed into the log scope
+System\.Debug\s*[:=]\s*true                          // Azure DevOps diagnostic mode
+console\.(log|debug|info)\([^)]*(token|password|Authorization)
+```
+
 ## What to Report
 
-For each of the three requirements above, provide:
+For each of requirements 1–3, provide:
 - ✅ **IMPLEMENTED** / ⚠️ **PARTIALLY IMPLEMENTED** / ❌ **NOT IMPLEMENTED**
 - Specific file locations and line numbers where implementations are found (or absent)
 - Gaps or missing components
 - Security risks if the requirement is not met
 - Concrete recommendations for implementation or improvement
+
+For each sensitive-data finding (section 4), provide:
+- **File** and line number
+- **Log statement** or configuration entry
+- **Data type** being logged (credential, PII, financial, etc.)
+- **Recommendation**: masking, redaction, or removal approach
+
+**Severity** for each gap or finding:
+- **Critical**: credentials, tokens, session ids, BSN/SSN, PAN/CVV in logs
+- **High**: no global exception logging (exceptions reach no sink, or are logged without the exception object); audit events not logged for authentication, authorization or privileged actions; special-category or financial payload in logs; exception messages carrying connection strings or user secrets
+- **Medium**: console the only sink in production, or `Microsoft.*` / `System.*` categories at `Information` or lower in production; audit events not separated from the application log; email, name or phone logged as payload rather than as the acting user; request or response bodies logged
+- **Low**: missing correlation ids

@@ -2,6 +2,9 @@
 
 Analyze the codebase to identify potential Cross-Site Scripting (XSS) vulnerabilities where output is not properly encoded before being rendered in a browser:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A05 Injection · **ASVS 5.0:** V1 Encoding and Sanitization, V3 Web Frontend Security
+
 ## Core Security Principle
 **All output that is to be rendered in a browser should be encoded. Most UI frameworks do this by default, but developers can bypass these protections, creating security vulnerabilities.**
 
@@ -64,16 +67,20 @@ window.location = userValue;
 @Html.Raw(
 Html.Raw(
 @(new HtmlString(
-@MvcHtmlString.Create(
+@MvcHtmlString.Create(   // legacy (.NET Framework MVC5), not expected on this stack; search term only
 
-// Also check for JavaScript context
+// JavaScript context: NOT a finding by itself. Json.Serialize (System.Text.Json default encoder,
+// or Newtonsoft via AddNewtonsoftJson with EscapeHtml) escapes < > & ' as \uXXXX, so this is safe:
 <script>var data = @Html.Raw(Json.Serialize(model));</script>
+// The finding is the relaxed encoder that disables that escaping, or a serializer without it inside Html.Raw:
+JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+@Html.Raw(JsonConvert.SerializeObject(
 ```
 
 **Flags to raise:**
 - `Html.Raw()` with user input or database content
-- `HtmlString` or `MvcHtmlString` created from untrusted sources
-- Raw output in JavaScript context without proper JSON encoding
+- `HtmlString` (or legacy `MvcHtmlString`) created from untrusted sources
+- Raw output in JavaScript context without proper JSON encoding: `Html.Raw` around a string that is not the output of `Json.Serialize`, or `Json.Serialize` output when `JavaScriptEncoder.UnsafeRelaxedJsonEscaping` is configured (`AddJsonOptions`, `JsonSerializerOptions.Encoder`, or options passed to `Json.Serialize`)
 - Use of `WriteLiteral()` with dynamic content
 
 **Safe alternatives:**
@@ -84,8 +91,8 @@ Html.Raw(
 // SAFE - Explicitly encoded
 @Html.Encode(userContent)
 
-// SAFE - Attribute encoding
-@Html.AttributeEncode(value)
+// SAFE - Razor encodes attribute values too (MVC5 Html.AttributeEncode is legacy, not needed on this stack)
+<input value="@Model.Value">
 ```
 
 ## 3. Rich Text Editor Output
@@ -101,7 +108,6 @@ Html.Raw(
 TinyMCE.init
 CKEDITOR.config
 new Quill(
-ReactQuill
 editor.config
 
 // Look for sanitization configuration
@@ -137,7 +143,7 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 // UNSAFE
 <script>var name = "@Model.Name";</script>
 
-// SAFE
+// SAFE unless JavaScriptEncoder.UnsafeRelaxedJsonEscaping is configured (see section 2)
 <script>var name = @Json.Serialize(Model.Name);</script>
 ```
 
@@ -155,15 +161,16 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 <!-- UNSAFE -->
 <div style="color: @Model.Color;">
 
-<!-- SAFE - validate against whitelist -->
+<!-- SAFE - never interpolate into style; map the value through an allow-list to a CSS class -->
+<div class="@(AllowedColors.Contains(Model.Color) ? Model.Color : "default")">
 ```
+**Pattern:** `style="[^"]*@(Model|ViewBag|ViewData)` in `*.cshtml`; `bypassSecurityTrustStyle` in `*.ts` (Angular sanitizes `[style.*]`/`[ngStyle]` bindings, so only the bypass is a finding).
 
 ## 5. What to Report
 
-**Report ALL instances of (HIGH PRIORITY):**
+**Report ALL instances of (rate each per the Risk Assessment below):**
 - `Html.Raw()` usage in Razor views with non-constant values
 - `DomSanitizer.bypassSecurityTrust*()` usage, especially with dynamic content
-- `dangerouslySetInnerHTML` in React components
 - Direct `innerHTML` assignment with untrusted data
 - Unencoded output in JavaScript, URL, or CSS contexts
 - Rich text editors without proper whitelist configuration
@@ -172,23 +179,21 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 **For each finding, provide:**
 - File path and line number
 - Code snippet showing the vulnerability
-- Risk level: HIGH (user input), MEDIUM (database content), LOW (admin-only content)
-- Source of the unencoded data (user input, database, API, etc.)
+- Risk level: Critical / High / Medium / Low per the Risk Assessment below, rated by the **original** source of the data, not by where it is stored
+- Source of the unencoded data (user input, database, API, etc.) traced back to who originally supplied it
 - Recommended fix with safe alternative
-- Context (Angular, Razor, React, etc.)
+- Context (Angular, Razor, etc.)
 
 **Risk Assessment:**
-- **HIGH**: User-provided content rendered without encoding
-- **MEDIUM**: Database or API content without encoding validation
-- **LOW**: Admin-only or trusted content with security bypass (still requires justification)
+- **Critical**: Content from unauthenticated input rendered without encoding (reflected XSS reachable without login)
+- **High**: Content that originated from any user rendered without encoding, regardless of whether it is reflected or read back from the database or an API — stored XSS is High irrespective of storage location. Admin-supplied content rendered to other users is cross-user impact and is also High
+- **Medium**: Admin-supplied content rendered only back to the same admin, or system-originated content (configuration, internal service) rendered through a bypass without justification; admin-supplied input is never rated below Medium
+- **Low**: Bypass applied to compile-time constant content with no documented justification
 
 ## 6. Best Practices Verification
 
 **Verify that the application:**
 - Uses framework default encoding (don't disable it)
-- Implements Content Security Policy (CSP) headers
-- Validates and sanitizes input on the server side
-- Uses secure HTTP headers (X-XSS-Protection, X-Content-Type-Options)
 - Implements proper output encoding for each context (HTML, JavaScript, URL, CSS)
 - Has documented justification for any security bypasses
 - Performs regular security testing/scanning

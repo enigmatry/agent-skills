@@ -2,6 +2,9 @@
 
 Scan the codebase for Insecure Direct Object Reference vulnerabilities where API endpoints or data-access operations accept resource identifiers from the caller without verifying the caller is authorized to access that specific resource.
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A01 Broken Access Control · **ASVS 5.0:** V8 Authorization
+
 ## Core Security Principle
 **Every request that accesses a resource by ID must verify that the authenticated user is authorized to access that specific resource. Authentication (confirming who you are) is not the same as authorization (confirming what you may access).**
 
@@ -19,7 +22,7 @@ Look for data access without ownership or permission validation:
 - Controllers that fetch objects by ID without checking user ownership
 - Database queries using caller-supplied IDs without access control validation
 - Repository methods like `GetById(id)` called without a prior ownership check
-- File access operations using caller-provided paths or IDs
+- File access operations using caller-provided IDs that resolve to another user's file
 
 ## 3. Vulnerable Code Patterns
 
@@ -27,9 +30,6 @@ Flag these patterns for closer review:
 ```csharp
 // Direct lookup without ownership check
 var document = await context.Documents.FindAsync(documentId);
-
-// File access with user-controlled path
-var content = File.ReadAllText(filePath);
 
 // Bulk query without user-scoped filter
 return await context.Orders.Where(o => ids.Contains(o.Id)).ToListAsync();
@@ -51,7 +51,7 @@ return await context.Orders.Where(o => ids.Contains(o.Id)).ToListAsync();
 
 ## 6. Framework-Specific Checks
 
-- **ASP.NET Core**: Missing `[Authorize]` attributes or resource-based authorization policies
+- **ASP.NET Core**: Missing resource-based authorization policies (`IAuthorizationService.AuthorizeAsync(user, resource, policy)`, `IAuthorizationHandler<TRequirement, TResource>`)
 - **Entity Framework**: Direct `context` access without a user-scoped filter
 - **Repository patterns**: Generic repositories lacking built-in ownership enforcement
 - **Service layer**: Business logic that does not validate resource ownership before returning data
@@ -70,5 +70,5 @@ For each finding, provide:
 - **File** and line number
 - **Endpoint or method** where the unchecked access occurs
 - **ID parameter** used (route, query string, or body)
-- **Risk**: HIGH (user data accessible without any ownership check) / MEDIUM (partial checks present with gaps) / LOW (admin-only endpoint with incomplete scope validation)
+- **Risk**: Critical (resource reachable without authentication, or cross-tenant access to sensitive data from low-privilege input) / High (another user's or tenant's data accessible to an authenticated caller without an ownership check, including admin endpoints that do not scope to the admin's tenant — cross-tenant or cross-user access is never below High) / Medium (ownership check present but with gaps that need another weakness to exploit) / Low (internal identifiers exposed but every access path is scoped; hygiene only)
 - **Recommendation**: resource-based authorization check or ownership filter to apply

@@ -2,6 +2,11 @@
 
 Analyze the production application's SSL/TLS configuration to identify weak protocols, cipher suites, and other TLS-related vulnerabilities:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A04 Cryptographic Failures, A02 Security Misconfiguration · **ASVS 5.0:** V12 Secure Communication
+
+> **Hosting model:** this check depends on `HOSTING_MODEL` from SKILL.md Step 0b. `web.config` sections apply only when it is `iis`; for `linux` use the middleware or platform equivalents named in this file and do not report missing `web.config` entries; with the `edge` modifier the live `PRODUCTION_URL` response is the ground truth and `UseForwardedHeaders` must be configured.
+
 ## Core Security Principle
 **Only strong TLS protocols (TLS 1.2 and TLS 1.3) should be enabled with secure cipher suites. Weak or deprecated protocols and ciphers must be disabled to prevent downgrade attacks and cryptographic vulnerabilities.**
 
@@ -12,12 +17,12 @@ Analyze the production application's SSL/TLS configuration to identify weak prot
 **How to Test**:
 1. Navigate to: https://www.ssllabs.com/ssltest/
 2. Enter the production URL (e.g., `https://yourdomain.com`)
-3. Click "Submit"
+3. Check "Do not show the results on the boards" for privacy, then click "Submit"
 4. Wait for comprehensive analysis (typically 2-5 minutes)
 5. Review the detailed report
 
-**Ask the user for**:
-- Production URL(s) to test
+**Ask the user for** (once; reuse `PRODUCTION_URL` when SKILL.md already collected it):
+- Production URL(s) to test (e.g. `https://app.example.com`, `https://api.example.com`)
 - Any additional endpoints (API endpoints, admin portals, etc.)
 
 ## 2. SSL/TLS Protocol Versions
@@ -32,10 +37,10 @@ TLS 1.2 (Minimum required)
 
 **❌ BAD - MUST be disabled:**
 ```
-SSL 2.0 (CRITICAL - Broken, deprecated in 2011)
-SSL 3.0 (CRITICAL - POODLE attack, deprecated in 2015)
-TLS 1.0 (HIGH - Deprecated in 2020, PCI DSS non-compliant)
-TLS 1.1 (HIGH - Deprecated in 2020, PCI DSS non-compliant)
+SSL 2.0 (Critical - Broken, deprecated in 2011)
+SSL 3.0 (Critical - POODLE attack, deprecated in 2015)
+TLS 1.0 (High - Deprecated in 2020, PCI DSS non-compliant)
+TLS 1.1 (High - Deprecated in 2020, PCI DSS non-compliant)
 ```
 
 **SSL Labs Grade Impact:**
@@ -67,7 +72,7 @@ TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
 
 **❌ BAD - MUST NOT be enabled:**
 
-**CRITICAL - Known broken ciphers:**
+**Critical - Known broken ciphers:**
 ```
 NULL ciphers (No encryption)
 EXPORT ciphers (40-bit/56-bit keys - FREAK attack)
@@ -76,7 +81,7 @@ RC4 (Stream cipher - multiple attacks)
 MD5-based ciphers (Collision attacks)
 ```
 
-**HIGH - Weak or deprecated:**
+**High - Weak or deprecated:**
 ```
 CBC mode ciphers without AEAD (BEAST, Lucky13 attacks)
 RSA key exchange without PFS (No forward secrecy)
@@ -103,7 +108,7 @@ Certificate chain: Complete and valid
 Certificate transparency: Enabled
 OCSP stapling: Enabled only if the certificate carries an OCSP URL (Let's Encrypt stopped OCSP in August 2025; CRL-only certificates cannot staple and this is not a finding)
 Validity period: ≤ 200 days for certificates issued on or after 15 March 2026 (CA/Browser Forum SC-081); ≤ 100 days from 15 March 2027; ≤ 47 days from 15 March 2029
-Renewal: automated (ACME client, App Service managed certificate, Key Vault auto-rotation) — manual renewal cannot keep up with these lifetimes and is a HIGH finding
+Renewal: automated (ACME client, App Service managed certificate, Key Vault auto-rotation) — manual renewal cannot keep up with these lifetimes and is a High finding
 ```
 
 **❌ BAD:**
@@ -130,11 +135,6 @@ Certificate hostname mismatch
 
 **✅ MUST be enabled:**
 ```
-HTTP Strict Transport Security (HSTS)
-  - max-age ≥ 31536000 (1 year)
-  - includeSubDomains
-  - preload (optional)
-
 Server Name Indication (SNI): Supported
 Secure Renegotiation: Supported
 Session resumption: Supported (for performance)
@@ -158,7 +158,7 @@ Client-initiated renegotiation
 
 ## 6. Forward Secrecy (Perfect Forward Secrecy - PFS)
 
-**CRITICAL requirement:**
+**Required (no Forward Secrecy is rated High):**
 
 **✅ REQUIRED:**
 - All cipher suites should support Forward Secrecy
@@ -178,7 +178,7 @@ Client-initiated renegotiation
 
 **SSL Labs automatically tests for:**
 
-**CRITICAL vulnerabilities:**
+**Critical vulnerabilities** (BEAST on TLS 1.0 is rated High, like TLS 1.0 itself):
 ```
 POODLE (SSL 3.0) - SSLv3 must be disabled
 BEAST (TLS 1.0 with CBC) - TLS 1.2+ required
@@ -194,7 +194,7 @@ Sweet32 (3DES) - 3DES must be disabled
 **SSL Labs Vulnerability Tests:**
 - Checks for each known vulnerability
 - Shows "No" (good) or "Yes" (vulnerable)
-- Any "Yes" result is CRITICAL and must be fixed
+- Any "Yes" result is Critical and must be fixed
 
 ## 8. SSL Labs Grading Criteria
 
@@ -252,10 +252,35 @@ properties: {
 
 **What to check:**
 - `httpsOnly: true` — App Service must redirect HTTP to HTTPS
-- `minTlsVersion` — must be `'1.2'` or `'1.3'`; flag `'1.0'` or `'1.1'` as HIGH
-- `ftpsState: 'Disabled'` — FTP access must be disabled in production; flag `'AllAllowed'` or `'FtpsOnly'` as MEDIUM
+- `minTlsVersion` — must be `'1.2'` or `'1.3'`; flag `'1.0'` or `'1.1'` as High
+- `ftpsState: 'Disabled'` — FTP access must be disabled in production; flag `'AllAllowed'` or `'FtpsOnly'` as Medium
+- With the `edge` modifier TLS terminates at Front Door (`Microsoft.Cdn/profiles` custom domain `minimumTlsVersion`) or Application Gateway (`sslPolicy`); the SSL Labs result reflects that edge policy, so check those Bicep properties as well as the App Service `minTlsVersion`
 
-## 10. What to Report
+## 10. Code-Level TLS Settings
+
+**Files to examine:** `*.cs`, `appsettings*.json`, `*.bicep`, pipeline variable files.
+
+**Search patterns:**
+```regex
+SslProtocols\.(Tls|Tls11|Ssl2|Ssl3|None)\b
+SecurityProtocolType\.(Tls|Tls11|Ssl3)\b
+ServicePointManager\.SecurityProtocol
+TrustServerCertificate\s*=\s*(True|true|yes)
+Encrypt\s*=\s*(False|false|no)
+ServerCertificateCustomValidationCallback
+DangerousAcceptAnyServerCertificateValidator
+ServerCertificateValidationCallback\s*=
+RemoteCertificateValidationCallback
+```
+
+| Finding | Severity |
+|---------|----------|
+| Certificate validation disabled (`DangerousAcceptAnyServerCertificateValidator`, a callback that returns `true`) in production code | High |
+| `TrustServerCertificate=True` or `Encrypt=False` in a production SQL connection string (the development `appsettings.Development.json` value is not a finding) | High |
+| `SslProtocols` / `SecurityProtocolType` explicitly enabling TLS 1.0 or 1.1 | High |
+| `SslProtocols` pinned to TLS 1.2 only (`SystemDefault`/`None` lets the OS negotiate TLS 1.3) | Low |
+
+## 11. What to Report
 
 **For each production endpoint tested:**
 
@@ -283,7 +308,7 @@ SSL 2.0: ❌ MUST BE DISABLED / ⚠️ Currently enabled
 ```
 ✅ Strong ciphers only (ECDHE, AES-GCM)
 ⚠️ Weak ciphers detected: [list specific ciphers]
-❌ CRITICAL: Broken ciphers enabled: [list specific ciphers]
+❌ Critical: Broken ciphers enabled: [list specific ciphers]
 ```
 
 ### Certificate Details:
@@ -308,61 +333,47 @@ DROWN: ✅ Not vulnerable / ❌ VULNERABLE
 
 ### Security Features:
 ```
-HSTS: ✅ Enabled (max-age: 31536000) / ❌ Not enabled
-HSTS Preload: ✅ Eligible / ⚠️ Not eligible / ❌ Not enabled
 Forward Secrecy: ✅ Yes (all ciphers) / ⚠️ With some browsers / ❌ No
 OCSP Stapling: ✅ Enabled / ❌ Disabled
 ```
 
-## 11. Remediation Priorities
+## 12. Remediation Priorities
 
-**CRITICAL (Fix Immediately):**
+**Critical (Fix Immediately):**
 - SSL 2.0/3.0 enabled
-- TLS 1.0 enabled (for PCI DSS compliance)
 - Known vulnerabilities (POODLE, DROWN, etc.)
 - Broken ciphers (NULL, EXPORT, RC4, DES)
 - Certificate expired or untrusted
 - Grade F or T (Trust issues)
 
-**HIGH (Fix Soon):**
+**High (Fix Soon):**
+- TLS 1.0 enabled (PCI DSS non-compliant)
 - TLS 1.1 enabled
 - Weak ciphers (3DES, CBC-mode)
 - No Forward Secrecy
-- Missing HSTS
 - Certificate key size < 2048 bits
 - SHA-1 certificate signature
+- No automated certificate renewal (see section 4)
+- Code-level: certificate validation disabled, `TrustServerCertificate=True` in production, TLS 1.0/1.1 enabled in code (see section 10)
 
-**MEDIUM (Plan to Fix):**
+**Medium (Plan to Fix):**
 - Cipher suite ordering (client preference)
 - Missing OCSP stapling (only when the certificate has an OCSP URL)
 - No TLS 1.3 support (SSL Labs caps the grade at A-)
-- Certificate issued after 15 March 2026 with validity > 200 days, or no automated renewal
+- Certificate issued after 15 March 2026 with validity > 200 days
 
-**LOW (Best Practice):**
-- HSTS preload eligibility
+**Low (Best Practice):**
 - ECDSA P-256/P-384 certificates (smaller handshakes; RSA key size above 2048 is not a finding either way)
 - Certificate Transparency compliance
-- Post-quantum hybrid key exchange (X25519MLKEM768) not offered — informational; default in current browsers, available on Windows Server 2025
+- Post-quantum hybrid key exchange (X25519MLKEM768) not offered — hygiene; default in current browsers, available on Windows Server 2025
 
-## 12. Testing Procedure
+## 13. Testing Procedure
 
 **Step-by-step SSL Labs audit:**
 
-1. **Obtain production URL(s)**
-   - Ask user: "Please provide the production URL(s) to test"
-   - Example: `https://app.example.com`, `https://api.example.com`
+1. **Obtain production URL(s) and run the SSL Labs test** as described in section 1 (one test per endpoint; all protocols, ciphers and vulnerabilities are covered)
 
-2. **Run SSL Labs test**
-   - Navigate to: https://www.ssllabs.com/ssltest/
-   - Enter URL
-   - Check "Do not show the results on the boards" for privacy
-   - Click Submit
-
-3. **Wait for results**
-   - Typically 2-5 minutes
-   - Tests all protocols, ciphers, and vulnerabilities
-
-4. **Analyze results**
+2. **Analyze results**
    - Overall grade
    - Protocol support
    - Cipher suites
@@ -370,7 +381,7 @@ OCSP Stapling: ✅ Enabled / ❌ Disabled
    - Vulnerability checks
    - Security features
 
-5. **Document findings**
+3. **Document findings**
    - Screenshot of overall grade
    - List of specific issues
    - Prioritized remediation steps

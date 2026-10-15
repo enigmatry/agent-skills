@@ -2,14 +2,16 @@
 
 Scan the codebase for packages with known security vulnerabilities, deprecated packages, and significantly outdated dependencies that pose security, compatibility, or maintenance risks.
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A03 Software Supply Chain Failures · **ASVS 5.0:** V15 Secure Coding and Architecture
+
 ## Core Security Principle
 **All third-party dependencies must be free of known security vulnerabilities. Vulnerable, deprecated, or significantly outdated packages must be updated or replaced.**
 
 ## 1. Package Management Systems Analysis
 **Check all package files:**
-- **NuGet packages**: `*.csproj`, `packages.config`, `Directory.Packages.props`, `Directory.Build.props`
-- **npm packages**: `package.json`, `package-lock.json`, `yarn.lock`
-- **Other package managers**: Any additional dependency files (pip, composer, etc.)
+- **NuGet packages**: `*.csproj`, `Directory.Packages.props`, `Directory.Build.props`, `nuget.config` (package sources); `packages.config` is legacy (.NET Framework), not expected on this stack
+- **npm packages**: `package.json`, `package-lock.json`, `yarn.lock`, `.npmrc` (registry)
 
 **Search for:**
 - Package version specifications with explicit versions
@@ -43,7 +45,7 @@ Scan the codebase for packages with known security vulnerabilities, deprecated p
 | Runtime | Status | Where to check |
 |---------|--------|----------------|
 | .NET 6, .NET 7 | End of life | `<TargetFramework>` in `*.csproj`, `global.json`, `UseDotNet@2` in pipelines |
-| .NET 8 (LTS) and .NET 9 (STS) | Both end support on **10 November 2026** — flag as HIGH if no migration to .NET 10 is planned | same |
+| .NET 8 (LTS) and .NET 9 (STS) | Both end support on **10 November 2026** — flag as High if no migration to .NET 10 is planned | same |
 | .NET 10 (LTS) | Supported until November 2028 — target version | same |
 | Node.js 18, 20 | End of life (Node 20 ended 30 April 2026) | `engines.node` in `package.json`, `.nvmrc`, `NodeTool@0` / `UseNode@1` in pipelines |
 | Node.js 22 | Maintenance until April 2027 | same |
@@ -89,22 +91,23 @@ npm outdated
 
 Use the NVD CVSS severity bands as reported by the advisory; do not shift them up.
 
-**CRITICAL (Immediate action required):**
+**Critical (immediate action required):**
 - CVSS 9.0–10.0
 - Known exploits in the wild (any CVSS)
 - Unauthenticated RCE or authentication bypass (any CVSS)
 
-**HIGH (Address soon):**
+**High (address soon):**
 - CVSS 7.0–8.9
 - Deprecated packages with security implications
 - Packages targeting an end-of-life runtime (see section 3)
+- A lockfile `resolved` URL or a `nuget.config` package source outside the configured registries (see Additional Considerations)
 
-**MEDIUM (Plan for update):**
+**Medium (plan for update):**
 - CVSS 4.0–6.9
 - Significantly outdated packages (>2 major versions behind)
 - Non-security deprecation warnings
 
-**LOW (Monitor):**
+**Low (monitor):**
 - CVSS 0.1–3.9
 
 Not findings: minor or patch updates available, pre-release versions available, documentation-only or feature-only updates, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
@@ -152,11 +155,10 @@ For each package issue found, provide:
 ```
 
 ## Additional Considerations
-1. **Supply chain security**: Check for typosquatting or suspicious packages
-2. **License compliance**: Verify license compatibility of updates
-3. **Update testing**: Identify packages requiring extensive testing
-4. **Rollback planning**: Consider packages with complex rollback requirements
-5. **Monitoring setup**: Ongoing vulnerability scanning automation
+1. **Supply chain security**: every `"resolved"` URL in `package-lock.json` (or `resolved` line in `yarn.lock`) and every `<add key=... value=...>` source in `nuget.config` must point at a configured registry (`https://registry.npmjs.org/`, `https://api.nuget.org/v3/index.json`, or the organisation's Azure Artifacts feed `https://pkgs.dev.azure.com/...`). Search with `"resolved": "(?!https://registry\.npmjs\.org/|https://pkgs\.dev\.azure\.com/)` and report each other host as High
+2. **Update testing**: Identify packages requiring extensive testing
+3. **Rollback planning**: Consider packages with complex rollback requirements
+4. **Monitoring setup**: Ongoing vulnerability scanning automation
 
 Focus on providing actionable intelligence with clear prioritization for remediation efforts.
 

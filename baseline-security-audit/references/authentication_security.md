@@ -2,8 +2,11 @@
 
 Analyze the codebase to verify that a standard, secure authentication protocol is used consistently across all API endpoints, and that key policy settings meet minimum security requirements.
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A07 Authentication Failures, A01 Broken Access Control · **ASVS 5.0:** V6 Authentication, V8 Authorization, V10 OAuth and OIDC
+
 ## Core Security Principle
-**All API endpoints must require authentication by default. The application must use OpenID Connect with Authorization Code flow and PKCE. Custom authentication solutions are not acceptable; any deviation from a standard protocol must be treated as a high-priority finding.**
+**All API endpoints must require authentication by default. The application must use OpenID Connect with Authorization Code flow and PKCE. Custom authentication solutions are not acceptable; any deviation from a standard protocol is rated at least High (Critical when it allows authentication bypass).**
 
 ## 1. Default Authorization on API Endpoints
 
@@ -44,7 +47,7 @@ public IActionResult GetSensitiveData() { ... }
 
 ## 2. Swagger UI Restricted to Development
 
-Swagger/OpenAPI UI exposes the full API surface and must not be accessible on Acceptance or Production environments.
+Swagger/OpenAPI UI exposes the full API surface and must not be accessible in any environment other than Development.
 
 **GOOD — gated behind environment check:**
 ```csharp
@@ -64,7 +67,7 @@ app.UseSwaggerUI();
 // BAD — enabled outside Development
 if (!app.Environment.IsProduction())
 {
-    app.UseSwagger();  // still accessible on Staging/Acceptance
+    app.UseSwagger();  // still accessible in every non-Production environment
 }
 
 // BAD — Swagger enabled via feature flag without environment guard
@@ -76,7 +79,7 @@ app.UseSwaggerUI(c => { ... });
 - NSwag: `app.UseOpenApi()`, `app.UseSwaggerUi()` — same requirement
 - .NET 9/10 built-in OpenAPI (`Microsoft.AspNetCore.OpenApi`, the template default since .NET 9): `AddOpenApi()` / `MapOpenApi()` exposes `/openapi/v1.json` — `MapOpenApi()` must be inside an `IsDevelopment()` block
 - Scalar: `MapScalarApiReference()`; ReDoc: `UseReDoc()` — same requirement
-- A project with none of these is not a finding; a project with `MapOpenApi()` or `MapScalarApiReference()` outside a Development guard is a HIGH finding even though no Swashbuckle package is referenced
+- A project with none of these is not a finding; a project with `MapOpenApi()` or `MapScalarApiReference()` outside a Development guard is a High finding even though no Swashbuckle package is referenced
 
 ## 3. OpenID Connect with Authorization Code Flow and PKCE
 
@@ -218,7 +221,7 @@ builder.Services.AddAuthorizationBuilder()
 **Search for:**
 - Endpoints that modify or delete data without a role/policy restriction beyond `[Authorize]`
 - `AddPolicy` definitions that call only `RequireAuthenticatedUser()` — these add no value over the global fallback policy
-- `Roles = "..."` strings — verify roles actually exist in the identity provider and are assigned to real users
+- `Roles = "..."` strings — collect the distinct role names for question 4 in section 6; whether they exist in the identity provider cannot be verified from code
 
 **Angular route guards — check alignment with backend roles:**
 ```typescript
@@ -231,13 +234,15 @@ canActivate(): boolean {
 // BAD — no route guard on admin routes (user reaches the page, then sees an error)
 ```
 
-**Note:** Angular route guards are a UX concern, not a security boundary. The backend must always enforce authorization independently. Missing or mismatched Angular guards are a LOW-severity finding.
+**Note:** Angular route guards are a UX concern, not a security boundary. The backend must always enforce authorization independently. Missing or mismatched Angular guards are a Low-severity finding.
 
-**RED FLAGS:**
-- Admin, management, or bulk-operation endpoints decorated only with `[Authorize]` and no role or policy
-- Authorization policies that do not restrict beyond `RequireAuthenticatedUser()`
-- Role strings that do not match what the identity provider issues (e.g. `"Administrator"` vs `"Admin"`)
-- Angular admin routes with no route guard (LOW severity)
+**RED FLAGS (severity per finding):**
+- Endpoint without any authorization that exposes data or actions — Critical
+- No fallback policy while undecorated endpoints exist — High
+- Admin, management, or bulk-operation endpoints decorated only with `[Authorize]` and no role or policy — High
+- Authorization policies that do not restrict beyond `RequireAuthenticatedUser()` — Medium
+- Role strings used inconsistently within the code (e.g. `"Administrator"` in one place and `"Admin"` in another) — Medium; whether they match the identity provider is a section 6 question
+- Angular admin routes with no route guard, or a guard that is the only check — Low
 
 ## 6. Environment Policy Checks (Requires Human Input)
 
@@ -259,11 +264,13 @@ The following settings cannot be verified from source code alone. Ask someone wi
 >
 > 3. **MFA** — Is MFA enforced for this application through a Conditional Access policy, preferably phishing-resistant (FIDO2/passkeys, Windows Hello for Business, certificate-based)?
 >    - Microsoft's mandatory MFA rollout covers Azure management portals and tooling only; it does not protect custom applications
+>
+> 4. **Roles** — Do the role names used in `[Authorize(Roles = ...)]`, `RequireRole(...)` and policy definitions (list them from section 5) exist in the identity provider, and are they assigned to real users?
 
 ## What to Report
 
 For each finding, provide:
 - **Location**: file and line number (for code findings) or environment/configuration name (for policy findings)
 - **Issue**: description of the problem
-- **Risk**: HIGH (no default authorization, implicit flow, ROPC, Swagger on production) / MEDIUM (PKCE missing, non-user accounts using secrets instead of certificates, Swagger on Acceptance) / LOW (token lifetime slightly above threshold, weak password policy)
+- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow, ROPC, Swagger or OpenAPI reachable in any environment other than Development) / Medium (PKCE missing, non-user accounts using secrets instead of certificates or managed identity, policies that only `RequireAuthenticatedUser()`) / Low (token lifetime slightly above threshold, password policy deviating from NIST, Angular guard missing or mismatched)
 - **Recommendation**: the specific configuration change or policy update required

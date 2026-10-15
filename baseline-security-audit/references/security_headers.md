@@ -1,11 +1,16 @@
 # Security Headers Configuration Analysis
 
-Analyze security headers to identify missing or misconfigured values that protect against common web vulnerabilities.
+Analyze response security headers and removal of version-disclosing headers to identify missing or misconfigured values that protect against common web vulnerabilities.
+
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A02 Security Misconfiguration · **ASVS 5.0:** V3 Web Frontend Security, V13 Configuration
+
+> **Hosting model:** this check depends on `HOSTING_MODEL` from SKILL.md Step 0b. `web.config` sections apply only when it is `iis`; for `linux` use the middleware or platform equivalents named in this file and do not report missing `web.config` entries; with the `edge` modifier the live `PRODUCTION_URL` response is the ground truth and `UseForwardedHeaders` must be configured.
 
 ## Core Security Principle
-**Security headers provide defense-in-depth protection against XSS, clickjacking, MIME-sniffing, and other attacks. Proper configuration of these headers is essential for web application security.**
+**Security headers provide defense-in-depth protection against XSS, clickjacking, MIME-sniffing, and other attacks. Proper configuration of these headers is essential for web application security. Headers that disclose the platform (`Server`, `X-Powered-By`) must be removed from all responses.**
 
-## 0. Inspection Priority
+## 1. Inspection Priority
 
 **Always prefer live URL inspection over static code/config analysis.**
 
@@ -16,13 +21,15 @@ Analyze security headers to identify missing or misconfigured values that protec
 
 > When using the live URL, request both the front-end root (`/`) and a known API endpoint (e.g. `/api/health` or `/swagger`) so headers for both the Angular front-end and the API backend can be assessed independently.
 
-## 1. Front-End Application Headers (web.config)
+## 2. Front-End Application Headers (web.config)
 
 **Files to examine:**
 - `web.config` / `Web.config` — may exist in multiple locations; identify each file's owner before evaluating it
 - `web.release.config` — XDT transform applied on top of `web.config` for non-development environments; always check this alongside `web.config` and apply its transforms mentally to determine the effective header values in production
 - Look in the Angular project's published output folder
 - `Deployment/*.proj` — deployment profiles may override the CSP header per environment via `<ParameterValue>` elements; search for `<ParameterValue Include="Content Security Policy">` and evaluate the `<Value>` against the CSP rules below
+
+> On `linux` hosting the front-end headers are set by whatever serves the Angular bundle instead of `web.config`: nginx `add_header`, Azure Static Web Apps `staticwebapp.config.json` (`globalHeaders`), or the ASP.NET Core host's header middleware (section 10) when the SPA is served by the API.
 
 > ⚠️ **Multi-app projects** (e.g. a project with both a frontoffice and a backoffice) will have multiple `web.config` files. Before evaluating any `web.config`, determine whether it belongs to a **frontend** (Angular) app or a **backend** (API) app by inspecting its parent folder and sibling files (e.g. presence of `index.html`, `*.js` bundles → frontend; presence of `*.dll`, `appsettings.json` → backend). Apply the front-end header rules to frontend configs and the API header rules to backend configs. Report findings per app, not as a single combined result.
 
@@ -39,9 +46,9 @@ Analyze security headers to identify missing or misconfigured values that protec
 </configuration>
 ```
 
-## 2. Content Security Policy (CSP)
+## 3. Content Security Policy (CSP)
 
-**CRITICAL - Most important security header**
+**Most important security header — a missing CSP is rated High; a CSP with unsafe values is rated Medium**
 
 **GOOD configuration:**
 ```xml
@@ -70,7 +77,7 @@ Analyze security headers to identify missing or misconfigured values that protec
 - Prevents base tag injection attacks
 - Only allows base URI from same origin
 
-**3. script-src** (CRITICAL - no unsafe values):
+**3. script-src** (no unsafe values; any of the values below is a Medium finding):
 ```xml
 <!-- GOOD -->
 script-src 'self' 'nonce-{random}';
@@ -127,7 +134,7 @@ frame-ancestors 'self';
 <add name="Content-Security-Policy" value="script-src 'self'; style-src 'self'" />
 ```
 
-## 3. X-Frame-Options
+## 4. X-Frame-Options
 
 **Purpose**: Prevents clickjacking attacks
 
@@ -152,7 +159,7 @@ frame-ancestors 'self';
 <add name="X-Frame-Options" value="ALLOW-FROM https://example.com" />
 ```
 
-## 4. HTTP Strict Transport Security (HSTS)
+## 5. HTTP Strict Transport Security (HSTS)
 
 **Purpose**: Enforces HTTPS connections
 
@@ -171,7 +178,7 @@ frame-ancestors 'self';
 services.AddEntryHttps();
 app.UseEntryHttps();
 ```
-If found, treat HSTS as configured. These methods do not expose `max-age`, `includeSubDomains`, or `preload` parameters — do not flag their absence.
+If the project uses the `Enigmatry.Entry` HTTPS helpers, verify the effective HSTS value on the live URL or in the package source; do not assume it meets the one-year `max-age` / `includeSubDomains` minimum. On `linux` hosting (no `web.config`) the equivalent is `builder.Services.AddHsts(o => { o.MaxAge = TimeSpan.FromDays(365); o.IncludeSubDomains = true; })` with `app.UseHsts()`.
 
 **RED FLAGS:**
 ```xml
@@ -182,7 +189,7 @@ If found, treat HSTS as configured. These methods do not expose `max-age`, `incl
 <add name="Strict-Transport-Security" value="max-age=31536000" />
 ```
 
-## 5. X-Content-Type-Options
+## 6. X-Content-Type-Options
 
 **Purpose**: Prevents MIME-sniffing attacks
 
@@ -198,7 +205,7 @@ If found, treat HSTS as configured. These methods do not expose `max-age`, `incl
 <add name="X-Content-Type-Options" value="sniff" />
 ```
 
-## 6. Referrer-Policy
+## 7. Referrer-Policy
 
 **Purpose**: Controls referrer information in requests
 
@@ -222,7 +229,9 @@ If found, treat HSTS as configured. These methods do not expose `max-age`, `incl
 <add name="Referrer-Policy" value="no-referrer-when-downgrade" />
 ```
 
-## 7. Cross-Origin Resource Sharing (CORS)
+A missing `Referrer-Policy` is Low: every current browser defaults to `strict-origin-when-cross-origin`. An explicit insecure value (`unsafe-url`, `no-referrer-when-downgrade`) is Medium.
+
+## 8. Cross-Origin Resource Sharing (CORS)
 
 **Check CORS configuration in web.config or ASP.NET Core:**
 
@@ -258,7 +267,7 @@ services.AddCors(options =>
 });
 ```
 
-## 8. Subresource Integrity (SRI)
+## 9. Subresource Integrity (SRI)
 
 **Check Angular index.html for external resources:**
 
@@ -285,9 +294,9 @@ services.AddCors(options =>
 - `src/index.html`
 - Any templates loading external resources
 
-## 9. API Security Headers (Backend)
+## 10. API Security Headers (Backend)
 
-**For externally exposed APIs, configure these headers:**
+**For externally exposed APIs, configure these headers** (this is the single canonical API header block; the `web.config` form applies to `iis`, the middleware form to `linux`):
 
 **web.config configuration:**
 ```xml
@@ -338,7 +347,108 @@ app.Use(async (context, next) =>
 <!-- Missing headers entirely -->
 ```
 
-## 10. What to Report (Medium Priority)
+## 11. Version-Disclosing Headers (Server, X-Powered-By, X-AspNet-Version)
+
+**Information disclosure headers like `Server` and `X-Powered-By` reveal platform details and versions that attackers can use to identify known vulnerabilities. They must be removed from all HTTP responses (API and front-end). Every finding in this section is rated Low (information disclosure with no exploit path on its own).**
+
+**Headers to remove:**
+- **Server** - Reveals web server type and version (e.g., "Microsoft-IIS/10.0")
+- **X-Powered-By** - Reveals framework and version (e.g., "ASP.NET", "ASP.NET Core 6.0")
+- **X-AspNet-Version** - Reveals specific ASP.NET version (e.g., "4.0.30319") — legacy (.NET Framework), not expected on this stack
+- **X-AspNetMvc-Version** - Reveals ASP.NET MVC version — legacy (.NET Framework), not expected on this stack
+
+> `X-AspNet-Version`, `X-AspNetMvc-Version` and `<httpRuntime enableVersionHeader="false" />` exist only on .NET Framework. ASP.NET Core never emits these headers, so their absence (and the absence of `enableVersionHeader`) is **not** a finding on an ASP.NET Core project; only report them if the live response actually contains them.
+
+**Files to examine:** the API and front-end `web.config` / `Web.config` files and their `web.release.config` transforms listed in section 2 (the removal configuration must be present in both apps), plus `Program.cs` / `Startup.cs` and `appsettings*.json` for the Kestrel setting.
+
+On `linux` hosting `web.config` is ignored: the equivalent is `AddServerHeader = false` on Kestrel (below) and, with the `edge` modifier, a Front Door rules-engine or Application Gateway rewrite rule that strips `Server` / `X-Powered-By` at the edge.
+
+**GOOD configuration - web.config (both API and front-end):**
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <!-- Remove Server header -->
+    <security>
+      <requestFiltering removeServerHeader="true" />
+    </security>
+
+    <!-- Remove X-Powered-By header -->
+    <httpProtocol>
+      <customHeaders>
+        <remove name="X-Powered-By" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>
+```
+
+**For legacy .NET Framework applications only (not expected on this stack), also add to web.config:**
+```xml
+<configuration>
+  <system.web>
+    <!-- Remove X-AspNet-Version header -->
+    <httpRuntime enableVersionHeader="false" />
+  </system.web>
+
+  <system.webServer>
+    <security>
+      <requestFiltering removeServerHeader="true" />
+    </security>
+
+    <httpProtocol>
+      <customHeaders>
+        <remove name="X-Powered-By" />
+        <remove name="X-AspNet-Version" />
+        <remove name="X-AspNetMvc-Version" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>
+```
+
+**ASP.NET Core / Kestrel (Program.cs/Startup.cs):**
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Configure Kestrel to remove Server header
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    serverOptions.AddServerHeader = false;
+});
+
+var app = builder.Build();
+app.Run();
+```
+
+> **Do not accept middleware that calls `Response.Headers.Remove("Server")` as a remediation.** Kestrel adds its `Server` header when the response starts, after middleware has run, so only `AddServerHeader = false` removes it. Under IIS (in-process or out-of-process) the `Server` and `X-Powered-By` headers are added by IIS after the ASP.NET Core pipeline completes, so application code cannot remove them; only `removeServerHeader="true"` on `<requestFiltering>` and `<remove name="X-Powered-By" />` under `<httpProtocol><customHeaders>` in `web.config` work. Report such middleware as a non-working remediation.
+
+**Alternative - appsettings.json configuration:**
+```json
+{
+  "Kestrel": {
+    "AddServerHeader": false
+  }
+}
+```
+
+## 12. What to Report
+
+**Severity per header** (impact-based; the same header carries the same severity on the front-end and on the API):
+
+| Finding | Severity |
+|---------|----------|
+| `Content-Security-Policy` missing | High |
+| `Strict-Transport-Security` missing, `max-age` below one year, or `includeSubDomains` absent | High |
+| CSP present but weak (`unsafe-inline` / `unsafe-eval` / `data:` / `blob:` in `script-src`, `default-src *`, missing `base-uri`, missing `frame-ancestors`) | Medium |
+| `X-Content-Type-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy` missing | Medium |
+| `Referrer-Policy` set to `unsafe-url` or `no-referrer-when-downgrade` | Medium |
+| `Cache-Control: no-store` missing on API responses; CDN resource without SRI; CORS `*` combined with credentials | Medium |
+| `X-Frame-Options` missing while CSP `frame-ancestors` is present, or misaligned with it | Low |
+| HSTS `preload` absent | Low |
+| `Referrer-Policy` absent (browser default `strict-origin-when-cross-origin` applies) | Low |
+| `Server`, `X-Powered-By`, `X-AspNet-Version` or `X-AspNetMvc-Version` present in a live response (version information disclosure) | Low |
+| `Response.Headers.Remove("Server")` middleware used as the remediation for version-disclosing headers (non-working; see section 11) | Low |
 
 **For each missing or misconfigured header:**
 
@@ -361,7 +471,7 @@ Finding: Missing Content Security Policy
 - Location: web.config
 - Current Value: Not configured
 - Issue: No CSP header present
-- Risk: MEDIUM - Application vulnerable to XSS attacks, no CSP protection
+- Risk: High - Application vulnerable to XSS attacks, no CSP protection
 - Recommendation: Add CSP header starting with default-src 'none'; base-uri 'self'; frame-ancestors 'none'
 ```
 
@@ -371,7 +481,7 @@ Finding: Unsafe CSP Configuration
 - Location: web.config, line 15
 - Current Value: default-src 'self'; script-src 'self' 'unsafe-inline'
 - Issue: script-src allows 'unsafe-inline'
-- Risk: MEDIUM - Inline scripts allowed, reduces XSS protection
+- Risk: Medium - Inline scripts allowed, reduces XSS protection
 - Recommendation: Remove 'unsafe-inline', use nonces or hashes for inline scripts
 ```
 
@@ -381,7 +491,7 @@ Finding: Missing HSTS Header
 - Location: web.config
 - Current Value: Not configured
 - Issue: No HSTS enforcement
-- Risk: MEDIUM - Users could be downgraded to HTTP, MITM attacks possible
+- Risk: High - Users could be downgraded to HTTP, MITM attacks possible
 - Recommendation: Add Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 ```
 
@@ -391,7 +501,7 @@ Finding: Misaligned X-Frame-Options and CSP
 - Location: web.config
 - Current Value: X-Frame-Options: SAMEORIGIN, frame-ancestors 'none'
 - Issue: Conflicting frame protection directives
-- Risk: LOW - Inconsistent framing policy across browsers
+- Risk: Low - Inconsistent framing policy across browsers
 - Recommendation: Align both: either DENY/'none' or SAMEORIGIN/'self'
 ```
 
@@ -401,7 +511,7 @@ Finding: API Missing Cache-Control Header
 - Location: API responses (check middleware/web.config)
 - Current Value: Not configured
 - Issue: API responses may be cached
-- Risk: MEDIUM - Sensitive data could be stored in browser/proxy caches
+- Risk: Medium - Sensitive data could be stored in browser/proxy caches
 - Recommendation: Add Cache-Control: no-store for all API responses
 ```
 
@@ -411,11 +521,21 @@ Finding: CDN Resources Missing SRI
 - Location: src/index.html, line 12
 - Current Value: <script src="https://cdn.../library.js"></script>
 - Issue: No integrity attribute for external resource
-- Risk: MEDIUM - CDN compromise could inject malicious code
+- Risk: Medium - CDN compromise could inject malicious code
 - Recommendation: Add integrity="sha384-..." and crossorigin="anonymous"
 ```
 
-## 11. Search Patterns
+```
+Finding: Server Header Discloses IIS Version
+- Header: Server
+- Location: API responses (all endpoints)
+- Current Value: Server: Microsoft-IIS/10.0
+- Issue: Server header reveals IIS version
+- Risk: Low - Attackers can identify platform and target known IIS 10.0 vulnerabilities
+- Recommendation: Add removeServerHeader="true" to web.config under <security><requestFiltering>
+```
+
+## 13. Search Patterns
 
 **Search web.config for security headers:**
 ```xml
@@ -428,6 +548,11 @@ Referrer-Policy
 Cache-Control
 Permissions-Policy
 Access-Control-Allow-Origin
+
+<!-- Check for version-header removal -->
+removeServerHeader
+<remove name="X-Powered-By" />
+enableVersionHeader
 
 <!-- Check for unsafe CSP values -->
 unsafe-inline
@@ -446,6 +571,8 @@ UseXContentTypeOptions
 UseReferrerPolicy
 UseCsp
 AddCors
+AddServerHeader
+Response.Headers.Remove
 ```
 
 **Search Angular index.html:**
@@ -459,7 +586,7 @@ integrity=
 crossorigin=
 ```
 
-## 12. Complete Configuration Examples
+## 14. Complete Configuration Examples
 
 **Front-end web.config (Angular application):**
 ```xml
@@ -480,40 +607,9 @@ crossorigin=
 </configuration>
 ```
 
-**API web.config:**
-```xml
-<httpProtocol>
-  <customHeaders>
-    <add name="Cache-Control" value="no-store" />
-    <add name="Content-Security-Policy" value="default-src 'none'; frame-ancestors 'none'" />
-    <add name="X-Frame-Options" value="DENY" />
-    <add name="X-Content-Type-Options" value="nosniff" />
-    <add name="Referrer-Policy" value="no-referrer" />
-    <add name="Permissions-Policy" value="geolocation=(), microphone=(), camera=()" />
-  </customHeaders>
-</httpProtocol>
-```
+**API (web.config or ASP.NET Core middleware):** use the header block in section 10 unchanged; it is not repeated here.
 
-**ASP.NET Core API (Program.cs):**
-```csharp
-var builder = WebApplication.CreateBuilder(args);
-var app = builder.Build();
-
-app.Use(async (context, next) =>
-{
-    context.Response.Headers.Add("Cache-Control", "no-store");
-    context.Response.Headers.Add("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
-    context.Response.Headers.Add("X-Frame-Options", "DENY");
-    context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
-    context.Response.Headers.Add("Referrer-Policy", "no-referrer");
-    context.Response.Headers.Add("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
-    await next();
-});
-
-app.Run();
-```
-
-## 13. Best Practices Verification
+## 15. Best Practices Verification
 
 **Verify the application follows:**
 
@@ -536,21 +632,27 @@ app.Run();
 - Referrer-Policy: no-referrer
 - Permissions-Policy configured
 
+✅ **Version-disclosing headers (API and front-end):**
+- `Server` removed via `removeServerHeader="true"` in web.config (`AddServerHeader = false` on Kestrel for `linux`)
+- `X-Powered-By` removed via `<remove name="X-Powered-By" />` in web.config
+- `enableVersionHeader="false"` for legacy .NET Framework applications only
+- Configuration applied to both API and front-end web.config files
+
 ✅ **General:**
 - Headers configured in web.config or middleware
 - No conflicting header values
 - CORS properly configured (not *)
 - Regular security header audits
 
-## 14. Testing Security Headers
+## 16. Testing Security Headers
 
 **Manual verification:**
 
 1. **Browser DevTools:**
    - Open Network tab
    - Refresh page
-   - Click on document request
-   - Check Response Headers section
+   - Click on document request (and an API call)
+   - Check Response Headers section; verify `Server` and `X-Powered-By` are absent
 
 2. **Online tools:**
    - https://securityheaders.com
@@ -560,7 +662,12 @@ app.Run();
 3. **Command line (curl):**
    ```bash
    curl -I https://your-app.com
+
+   # Version-disclosing headers: should return nothing if they are removed correctly
+   curl -I https://your-app.com | grep -i "server\|powered"
+   curl -I https://api.your-app.com/api/endpoint | grep -i "server\|powered"
    ```
+   PowerShell: `Invoke-WebRequest -Uri "https://your-app.com" -Method Head | Select-Object -ExpandProperty Headers` and look for `Server` or `X-Powered-By` in the output.
 
 4. **Verify CSP:**
    - Check browser console for CSP violations

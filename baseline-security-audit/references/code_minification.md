@@ -2,8 +2,11 @@
 
 Analyze the codebase to identify missing minification/uglification configurations that could expose implementation details and increase security risks:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A02 Security Misconfiguration · **ASVS 5.0:** V13 Configuration, V3 Web Frontend Security
+
 ## Core Security Principle
-**All code that is sent to the user (HTML, CSS, JavaScript) should be minified/uglified in production builds. This reduces the attack surface by obscuring implementation details, removing comments and debugging information, and making reverse engineering more difficult.**
+**All code that is sent to the user (HTML, CSS, JavaScript) should be minified in production builds. Minification itself is not a security control; what is security-relevant is source-map exposure (a publicly served `.map` file hands out the original source) and comments or debug code (`debugger;` statements, internal URLs or credentials in comments) that leak from unminified bundles.**
 
 ## 1. Angular Applications
 
@@ -46,7 +49,6 @@ Analyze the codebase to identify missing minification/uglification configuration
 
 **Files to check:**
 - `angular.json` - Main configuration file
-- `.angular-cli.json` - Legacy Angular CLI projects
 - Build scripts in `package.json`
 
 ## 2. CSS/SCSS Minification
@@ -167,11 +169,8 @@ module.exports = {
 {
   "scripts": {
     "build": "ng build --configuration production",  // Angular
-    "build": "react-scripts build",                   // CRA
-    "build": "next build",                            // Next.js
     "build": "vite build",                            // Vite
-    "build": "webpack --mode production",             // Webpack
-    "build": "vue-cli-service build"                  // Vue CLI
+    "build": "webpack --mode production"              // Webpack
   }
 }
 ```
@@ -184,26 +183,9 @@ module.exports = {
 
 ## 5. Server-Side Rendering (SSR) and Static Site Generation (SSG)
 
-**Next.js:**
-- Verify production builds use optimized output
-- Check `.next/` output directory for minified files
-
-**Nuxt.js:**
-```javascript
-// nuxt.config.js
-export default {
-  build: {
-    extractCSS: true,
-    optimization: {
-      minimize: true
-    }
-  }
-}
-```
-
-**Angular Universal:**
+**`@angular/ssr`:**
 - Verify both browser and server bundles are optimized
-- Check `angular.json` for SSR build configurations
+- Check the `server`, `ssr` and `prerender` options of the application builder in `angular.json`; the production configuration's `optimization` applies to both bundles
 
 ## 6. HTML Minification
 
@@ -227,11 +209,6 @@ module.exports = {
 // angular.json
 "sourceMap": false  // MUST be false for production
 
-// next.config.js
-module.exports = {
-  productionBrowserSourceMaps: false  // MUST be false (default)
-}
-
 // vite.config.js
 export default defineConfig({
   build: {
@@ -248,7 +225,7 @@ export default defineConfig({
 
 ## 8. What to Report
 
-**Report ALL instances of (LOW PRIORITY):**
+**Report ALL instances of (Medium for publicly served source maps, Low for everything else):**
 - Missing or disabled minification in production builds
 - `optimization: false` in production configurations
 - Source maps enabled in production builds
@@ -258,7 +235,7 @@ export default defineConfig({
 - Unminified JavaScript/TypeScript in production output
 - HTML files without minification
 - Third-party files excluded from build optimization
-- Comments and debugging code in production bundles
+- `debugger;` statements and comments in production bundles (`console.log` presence on its own is not a finding)
 
 **For each finding, provide:**
 - File path and configuration setting
@@ -267,10 +244,10 @@ export default defineConfig({
 - Recommended configuration
 - Build framework/tool being used
 
-**Risk Assessment:**
-- **MEDIUM**: Source maps publicly accessible (exposes source code)
-- **LOW**: Missing minification (reduces security through obscurity)
-- **INFO**: Suboptimal configuration (performance impact)
+**Severity:**
+- **Medium**: Source maps publicly accessible — `.map` files served from the production origin, or a `//# sourceMappingURL=` comment pointing at a reachable file (exposes source code)
+- **Low**: everything else in the list above (missing minification, `debugger;` statements, comments, development versions of third-party libraries, build scripts without production flags)
+- Not reported: suboptimal configuration with only a performance impact
 
 ## 9. Files and Directories to Check
 
@@ -278,18 +255,12 @@ export default defineConfig({
 - `angular.json` - Angular projects
 - `webpack.config.js` - Webpack configurations
 - `vite.config.js` / `vite.config.ts` - Vite projects
-- `next.config.js` - Next.js projects
-- `vue.config.js` - Vue CLI projects
-- `nuxt.config.js` - Nuxt.js projects
 - `postcss.config.js` - CSS processing
 - `package.json` - Build scripts
 - `.env.production` - Production environment variables
 
 **Build output directories to verify:**
 - `dist/` - Common build output
-- `build/` - React/CRA output
-- `.next/` - Next.js output
-- `out/` - Next.js static export
 - `public/` - Static files (check for unminified third-party files)
 
 ## 10. Verification Steps
@@ -309,9 +280,8 @@ export default defineConfig({
    - Verify no source maps are present (`.map` files)
 
 3. **Check for comments and debugging:**
-   - Search for `console.log` statements
+   - Check for `debugger;` statements (a finding; `console.log` presence on its own is not)
    - Look for code comments
-   - Check for debugging code (`debugger;`)
 
 4. **Verify third-party libraries:**
    - Check if using `.min.js` versions
@@ -326,7 +296,7 @@ export default defineConfig({
 - Minifies HTML templates in production
 - Disables source maps in production (or uses hidden source maps)
 - Uses minified versions of third-party libraries
-- Removes console.log and debugging statements
+- Removes `debugger;` statements
 - Removes comments from production code
 - Uses content hashing for cache busting
 - Optimizes images and other assets
@@ -337,7 +307,7 @@ export default defineConfig({
 - Makes reverse engineering more difficult
 - Removes comments that may contain sensitive information
 - Obscures variable and function names
-- Removes debugging code and console statements
+- Removes `debugger;` statements and debug-only code
 - Reduces file size and improves performance
 - Provides security through obscurity (not primary defense, but helpful)
 
@@ -353,12 +323,6 @@ export default defineConfig({
 **Watch out for:**
 
 ```javascript
-// WRONG - Production using development mode
-NODE_ENV=development npm run build
-
-// CORRECT - Production using production mode
-NODE_ENV=production npm run build
-
 // WRONG - Minification explicitly disabled
 optimization: { minimize: false }
 

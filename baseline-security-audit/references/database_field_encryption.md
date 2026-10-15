@@ -2,6 +2,9 @@
 
 Analyze the codebase to verify that sensitive fields stored in the database are protected with encryption, so that anyone with direct database access cannot read them in plain text.
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A04 Cryptographic Failures · **ASVS 5.0:** V14 Data Protection, V11 Cryptography
+
 ## Core Security Principle
 **Fields that must remain unreadable to database administrators and anyone with direct database access — such as credit card numbers, social security numbers, and bank account details — must be encrypted at the column level or encrypted/decrypted transparently by the application. Passwords are out of scope here; they must be hashed (see Cryptography Security check).**
 
@@ -13,6 +16,7 @@ Search entity classes and DTOs for fields that should never be readable in plain
 ```csharp
 // Identity and government identifiers
 public string SocialSecurityNumber { get; set; }
+public string Bsn { get; set; }                    // BurgerServiceNummer (NL)
 public string NationalId { get; set; }
 public string PassportNumber { get; set; }
 public string DriverLicenseNumber { get; set; }
@@ -41,7 +45,7 @@ public byte[] BiometricData { get; set; }
 - `*DbContext.cs` — which entities are mapped
 - `Migrations/*.cs` — to see column types and names added over time
 
-**Note:** Passwords must be *hashed*, not encrypted. If you encounter a `Password` field that is encrypted rather than hashed, flag it as a separate issue.
+**Note:** Passwords must be *hashed*, not encrypted; they are out of scope here.
 
 ## 2. SQL Server Always Encrypted
 
@@ -133,16 +137,6 @@ public class SensitiveDataService
 
 Encryption is only as strong as the protection of its keys.
 
-**RED FLAGS:**
-```csharp
-// CRITICAL — hardcoded encryption key
-private static readonly byte[] Key = new byte[] { 0x12, 0x34, ... };
-private const string EncryptionKey = "MySuperSecretKey123!";
-
-// BAD — key derived from application configuration without key vault
-var key = Encoding.UTF8.GetBytes(config["Encryption:Key"]);
-```
-
 **GOOD:**
 ```csharp
 // Key retrieved from Azure Key Vault at runtime
@@ -150,9 +144,9 @@ var keyBytes = await keyVaultClient.GetSecretAsync("FieldEncryptionKey");
 ```
 
 **Check for:**
-- Encryption keys stored in `appsettings.json` or source code rather than a key vault
-- Keys derived from weak or guessable strings
 - No key rotation strategy in place
+
+Report missing key-rotation evidence for the column-encryption key as Low; hard-coded or static keys are reported by check 13 (cryptography_security.md).
 
 ## 6. Transparent Data Encryption (TDE)
 
@@ -185,6 +179,6 @@ resource sqlDb 'Microsoft.Sql/servers/databases@2021-11-01' = {
 For each finding, provide:
 - **Entity/table** and **field/column** name (for column-level findings), or **infrastructure file** and line number (for TDE findings)
 - **Data type**: SSN, credit card, IBAN, biometric, medical record, TDE configuration, etc.
-- **Current state**: plain text, hashed (wrong approach for this data), application-encrypted, column-encrypted, or TDE disabled
-- **Risk**: HIGH (SSN, credit card, bank account, biometric — unencrypted; or TDE explicitly disabled) / MEDIUM (medical or other sensitive personal data — unencrypted) / LOW (encryption present but key management is weak)
+- **Current state**: plain text, application-encrypted, column-encrypted (Always Encrypted), or TDE disabled
+- **Severity** (by data class of an unencrypted column): Critical (CVV/CVC or full track data stored at all; full PAN stored in clear) / High (BSN/SSN, bank account, IBAN, biometric or health data unencrypted; TDE explicitly disabled) / Medium (other PII unencrypted) / Low (no key rotation evidence for the column-encryption key). A hard-coded or static key is reported under check 13 (cryptography_security.md), not here.
 - **Recommendation**: preferred approach (Always Encrypted, EF Core value converter, or Data Protection API for column-level; ensure TDE is enabled for database-level) and any key management improvements required
