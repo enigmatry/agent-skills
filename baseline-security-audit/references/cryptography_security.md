@@ -56,16 +56,29 @@ SHA1.Create()     // CRITICAL - Deprecated (collision attacks)
 
 ## 3. Data Encryption/Decryption
 
-**GOOD - AES encryption:**
+**GOOD - AES-GCM (authenticated encryption):**
+```csharp
+// AES-GCM is a separate class; CipherMode has no GCM member.
+var nonce = RandomNumberGenerator.GetBytes(AesGcm.NonceByteSizes.MaxSize); // 12 bytes, fresh per message
+var tag = new byte[AesGcm.TagByteSizes.MaxSize];                             // 16 bytes
+var ciphertext = new byte[plaintext.Length];
+using (var aesGcm = new AesGcm(key, tagSizeInBytes: 16))                     // 256-bit key
+{
+    aesGcm.Encrypt(nonce, plaintext, ciphertext, tag);
+}
+// Store nonce + ciphertext + tag together. Never reuse a nonce with the same key.
+```
+
+**ACCEPTABLE - AES-CBC only with a MAC (encrypt-then-HMAC):**
 ```csharp
 using (var aes = Aes.Create())
 {
-    aes.KeySize = 256;              // 256-bit key (MUST)
-    aes.Mode = CipherMode.GCM;      // GCM (BEST) or CBC
-    aes.GenerateKey();
+    aes.KeySize = 256;
+    aes.Mode = CipherMode.CBC;      // Aes.Create() default; unauthenticated without an HMAC
     aes.GenerateIV();               // Random IV per encryption
 }
 ```
+Flag CBC-encrypted data that is returned to clients (cookies, tokens) without an HMAC as HIGH (padding-oracle class).
 
 **RED FLAGS - Weak algorithms:**
 ```csharp
@@ -141,10 +154,16 @@ const key = 'hardcoded-key';    // Never hardcode
 
 **GOOD:**
 ```typescript
-CryptoJS.SHA256(data)           // Good
-CryptoJS.SHA512(data)           // Good
-CryptoJS.AES.encrypt(data, key) // Good
-crypto.subtle.digest('SHA-256', data) // Web Crypto API (best)
+crypto.subtle.digest('SHA-256', data)            // Web Crypto API (best)
+crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data) // Web Crypto API (best)
+crypto.getRandomValues(new Uint8Array(16))       // CSPRNG
+```
+
+**RED FLAGS - crypto-js:**
+```typescript
+import * as CryptoJS from 'crypto-js';   // MEDIUM: the library is discontinued and unmaintained
+CryptoJS.AES.encrypt(data, 'passphrase') // HIGH: key and IV derived with MD5 (OpenSSL EvpKDF, 1 iteration)
+CryptoJS.PBKDF2(password, salt)          // HIGH before 4.2.0: SHA-1 with 1 iteration (CVE-2023-46233)
 ```
 
 **Note:** Most cryptographic operations should happen server-side, not in Angular.
@@ -226,7 +245,7 @@ Finding: Insecure Encryption Mode (ECB)
 - Location: Utilities/EncryptionHelper.cs, line 89
 - Current: CipherMode.ECB with AES
 - Risk: HIGH - ECB reveals patterns in encrypted data
-- Recommendation: Use CipherMode.GCM or CBC with random IV
+- Recommendation: Use the `AesGcm` class with a fresh 96-bit nonce per message, or CBC with a random IV plus encrypt-then-HMAC
 ```
 
 ## 9. Search Patterns
@@ -276,7 +295,7 @@ new byte\[\]\s*\{.*\}.*[Kk]ey
 
 **Encryption:**
 1. ✅ **AES-256-GCM** (best - authenticated)
-2. ✅ **AES-256-CBC** (good - with random IV)
+2. ✅ **AES-256-CBC** (acceptable - random IV and encrypt-then-HMAC; unauthenticated CBC is malleable)
 3. ✅ **AES-192** (acceptable)
 4. ❌ **DES, TripleDES, RC2, ECB mode** (never)
 

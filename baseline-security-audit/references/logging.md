@@ -9,6 +9,8 @@ Analyze the codebase to verify that logging practices meet security requirements
 
 Verify that all unhandled exceptions are captured and logged with complete stack traces.
 
+> Full stack traces in the **log sink** are required and are not a sensitive-data finding. What sensitive_data_logging.md flags is sensitive values inside exception messages (connection strings, tokens, user input) and exception details that reach the **HTTP response**. Do not report the same handler under both checks.
+
 **Check for:**
 - Global exception handling middleware (`UseExceptionHandler`, custom middleware)
 - Exception filter attributes (`ExceptionFilterAttribute` implementations)
@@ -17,10 +19,11 @@ Verify that all unhandled exceptions are captured and logged with complete stack
 - Coverage for both API controllers and general application exceptions
 
 **Search patterns:**
-- `UseExceptionHandler`, `ExceptionFilterAttribute`, `IExceptionFilter`
-- `OnException`, `HandleException`, `GlobalException`
+- `UseExceptionHandler`, `AddExceptionHandler<T>()`, `IExceptionHandler` (.NET 8+), `AddProblemDetails()`
+- `ExceptionFilterAttribute`, `IExceptionFilter`, `OnException`, `HandleException`, `GlobalException`
 - `logger.LogError` with exception parameters
 - Middleware registration in `Configure` or `Program.cs`
+- .NET 10 only: an `IExceptionHandler` that returns `true` without calling `LogError` and without `ExceptionHandlerOptions.SuppressDiagnosticsCallback` configured — the middleware no longer logs for it (see exception_handling.md, section 1); .NET 8 and 9 log automatically
 
 ## 2. Console Logging Configuration
 

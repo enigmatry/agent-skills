@@ -30,7 +30,7 @@ Analyze HTTP responses to identify headers that disclose platform and version in
     <security>
       <requestFiltering removeServerHeader="true" />
     </security>
-    
+
     <!-- Remove X-Powered-By header -->
     <httpProtocol>
       <customHeaders>
@@ -53,7 +53,7 @@ Analyze HTTP responses to identify headers that disclose platform and version in
     <security>
       <requestFiltering removeServerHeader="true" />
     </security>
-    
+
     <httpProtocol>
       <customHeaders>
         <remove name="X-Powered-By" />
@@ -79,20 +79,10 @@ builder.WebHost.ConfigureKestrel(serverOptions =>
 });
 
 var app = builder.Build();
-
-// Remove any remaining version headers via middleware
-app.Use(async (context, next) =>
-{
-    context.Response.Headers.Remove("Server");
-    context.Response.Headers.Remove("X-Powered-By");
-    context.Response.Headers.Remove("X-AspNet-Version");
-    context.Response.Headers.Remove("X-AspNetMvc-Version");
-    
-    await next();
-});
-
 app.Run();
 ```
+
+> **Do not accept middleware that calls `Response.Headers.Remove("Server")` as a remediation.** Kestrel adds its `Server` header when the response starts, after middleware has run, so only `AddServerHeader = false` removes it. Under IIS (in-process or out-of-process) the `Server` and `X-Powered-By` headers are added by IIS after the ASP.NET Core pipeline completes, so application code cannot remove them; only `removeServerHeader="true"` on `<requestFiltering>` and `<remove name="X-Powered-By" />` under `<httpProtocol><customHeaders>` in `web.config` work. Report such middleware as a non-working remediation.
 
 **Alternative - appsettings.json configuration:**
 ```json

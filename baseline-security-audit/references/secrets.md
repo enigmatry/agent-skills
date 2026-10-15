@@ -26,18 +26,27 @@ Committed values like these in `appsettings*.json`, `environment.ts` or pipeline
 
 **Search for:**
 ```regex
-// API Keys and Tokens
-(api[_-]?key|apikey|access[_-]?token|secret[_-]?key|private[_-]?key)\s*[=:]\s*["']?[a-zA-Z0-9]{20,}["']?
+// API Keys and Tokens (charset includes base64 +/= and JWT/prefixed-token characters _-.)
+(api[_-]?key|apikey|access[_-]?token|secret[_-]?key|private[_-]?key)\s*[=:]\s*["']?[A-Za-z0-9_\-\.+/=]{16,}["']?
 
-// Connection Strings with Credentials
-(connection[_-]?string|server\s*=|data\s*source\s*=|password\s*=|pwd\s*=|user\s*id\s*=)
+// Connection Strings — only a hit when a credential term is present
+// (Server=/Data Source= with Integrated Security=true or Authentication=Active Directory Default contain no secret)
+(Password|Pwd|AccountKey|SharedAccessKey|SharedAccessSignature)\s*=\s*[^;"'\s]{4,}
 
-// Passwords and Secrets
+// Passwords and Secrets — assigned to a literal
 (password|pwd|pass|secret|token)\s*[=:]\s*["'][^"']{3,}["']
 
-// Azure/Cloud Service Keys
-(azure|aws|gcp)[_-]?(key|secret|token|credential)
+// Azure/Cloud Service Keys — require an assignment to a literal; the bare word list
+// matches identifiers such as AzureKeyVault or DefaultAzureCredential
+(azure|aws|gcp)[_-]?(key|secret|token|credential)\s*[=:]\s*["'][^"']{8,}["']
+```
 
+**Exclude from the patterns above** (otherwise every i18n label, test fixture and placeholder becomes a finding):
+- Paths: `*.resx`, `**/i18n/**`, `**/assets/i18n/**`, `**/*.spec.*`, `**/*.test.*`, `**/test*/**`, `**/__mocks__/**`, `**/node_modules/**`
+- Placeholder values: `<...>`, `changeme`, `your-*`, `xxx`, `***`, `#{Token}#`, `$(Var)`, `${{ }}`, `@Microsoft.KeyVault(SecretUri=...)`, `TODO`, `REPLACE`
+- Public keys that look like secrets: Stripe `pk_live_`/`pk_test_`, reCAPTCHA site keys, Firebase web API keys, Sentry DSNs, Mapbox `pk.`, Google Maps browser keys, MSAL/Auth0 client IDs
+
+```regex
 // JWT and Encryption
 (jwt[_-]?secret|signing[_-]?key|encryption[_-]?key|hmac[_-]?secret)
 ```

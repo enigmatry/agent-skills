@@ -3,7 +3,9 @@
 Analyze the application to ensure only necessary HTTP verbs are allowed, reducing the attack surface by blocking unused HTTP methods.
 
 ## Core Security Principle
-**Only allow HTTP verbs that are actually used by the application. Unused verbs should be blocked in web.config to prevent potential abuse and reduce attack surface. The DEBUG verb should only be allowed in local development environments.**
+**Only allow HTTP verbs that are actually used by the application. Unused verbs should be blocked in web.config to prevent potential abuse and reduce attack surface. The DEBUG verb is a legacy .NET Framework/ISAPI debugging mechanism that ASP.NET Core never uses; if it appears in any web.config, flag it.**
+
+> **Hosting note:** `<requestFiltering>` in `web.config` is only honoured by IIS and Azure App Service on Windows. Azure App Service on Linux, containers and Kestrel-edge hosting ignore it; there, verb filtering is a middleware or Front Door/WAF rule. Determine the hosting model before reporting.
 
 ## 1. What to Check
 
@@ -72,8 +74,8 @@ public class ProductsController : ApiController
 - **PUT** - Update/replace resources (commonly used)
 - **DELETE** - Delete resources (commonly used)
 - **PATCH** - Partial update (less common)
-- **OPTIONS** - CORS preflight (used if CORS is configured)
-- **HEAD** - Get headers only (rarely used)
+- **OPTIONS** - CORS preflight (required whenever the Angular front-end is served from a different origin than the API, which is the normal setup)
+- **HEAD** - Must be allowed whenever GET is allowed. It never appears in controller attributes but is used by Azure Front Door and Application Gateway health probes (Front Door defaults to HEAD), the IIS static-file handler and uptime monitors; blocking it can take an origin out of rotation.
 
 **Verbs that should typically be blocked:**
 - **TRACE** - Used for debugging, can expose sensitive information
@@ -131,11 +133,13 @@ public class ProductsController : ApiController
 </requestFiltering>
 ```
 
-## 3. DEBUG Verb - Development Only
+## 3. DEBUG Verb - Legacy Only
 
-**CRITICAL: DEBUG verb should only be allowed in local development, never in production.**
+**The DEBUG verb belongs to .NET Framework/ISAPI debugging. ASP.NET Core (AspNetCoreModuleV2, in-process or out-of-process) does not use it and Visual Studio does not need it. Do not recommend allowing DEBUG anywhere; the only check is that it is absent.** Absence of a `Web.Release.config` transform for DEBUG is **not** a finding on an ASP.NET Core project.
 
-### web.config (Development - allows DEBUG):
+The following examples are kept only for legacy .NET Framework projects that still carry the verb:
+
+### web.config (legacy .NET Framework development - allows DEBUG):
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
@@ -222,7 +226,7 @@ public class ProductsController : ApiController
   <add verb="PUT" allowed="true" />
   <add verb="DELETE" allowed="true" />
   <add verb="PATCH" allowed="true" />     <!-- Not used in any controller -->
-  <add verb="HEAD" allowed="true" />      <!-- Not used in any controller -->
+  <add verb="HEAD" allowed="true" />      <!-- Fine: HEAD follows GET (health probes) -->
   <add verb="TRACE" allowed="true" />     <!-- Should NEVER be allowed -->
   <add verb="CONNECT" allowed="true" />   <!-- Should NEVER be allowed -->
 </verbs>
@@ -238,9 +242,9 @@ public class ProductsController : ApiController
 </verbs>
 ```
 
-**BAD - Missing Web.Release.config transformation:**
-```
-<!-- No Web.Release.config file exists to remove DEBUG verb -->
+**BAD - DEBUG present in any web.config of an ASP.NET Core project:**
+```xml
+<add verb="DEBUG" allowed="true" />  <!-- Legacy verb; remove -->
 ```
 
 **GOOD - Only necessary verbs:**
@@ -423,7 +427,7 @@ Web.Production.config
 - **TRACE** - Can expose sensitive information via XST (Cross-Site Tracing) attacks
 - **TRACK** - Similar to TRACE
 - **CONNECT** - Used for tunneling, not needed for REST APIs
-- **DEBUG** - Only in development, never production
+- **DEBUG** - Legacy .NET Framework verb; never needed by ASP.NET Core
 
 ✅ **Common Verbs:**
 - **GET** - Almost always needed for retrieving data
@@ -431,13 +435,12 @@ Web.Production.config
 - **PUT** - Needed for full updates (if your API uses PUT)
 - **DELETE** - Needed if your API allows deletions
 - **PATCH** - Only if you implement partial updates (less common)
-- **OPTIONS** - Needed if CORS is configured for preflight requests
-- **HEAD** - Rarely needed, only allow if specifically used
+- **OPTIONS** - Needed whenever the front-end calls the API cross-origin (preflight)
+- **HEAD** - Allow whenever GET is allowed (health probes, static-file handler, monitoring)
 
 ✅ **Environment-Specific Configuration:**
-- Development: May allow DEBUG for local debugging
-- Staging: Should match production (no DEBUG)
-- Production: Minimal set of verbs, no DEBUG
+- All environments: identical verb list; DEBUG is never allowed on ASP.NET Core
+- Production: Minimal set of verbs
 
 ✅ **Documentation:**
 - Document why each verb is allowed

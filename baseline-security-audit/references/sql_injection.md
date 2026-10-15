@@ -15,11 +15,14 @@ Search for string interpolation, concatenation, or formatting used to build SQL 
 
 ## 2. Raw SQL Execution
 
-Look for raw SQL execution methods that may receive dynamic input:
-- `ExecuteSqlRaw()` or `ExecuteSqlInterpolated()` calls
-- `FromSqlRaw()` or `FromSqlInterpolated()` usage
-- `CommandText` assignments with dynamic content
-- `Database.SqlQuery()` or similar raw SQL methods
+**Unsafe unless every dynamic value is passed as a parameter** (these accept a plain `string`):
+- `FromSqlRaw()`, `ExecuteSqlRaw()`, `ExecuteSqlRawAsync()`, `SqlQueryRaw<T>()`
+- `CommandText` assignments with dynamic content (`SqlCommand`, Dapper `Query`/`Execute`)
+- Flag when the SQL string is built with `+`, `$"..."` assigned to a `string` first, `string.Format`, `StringBuilder`, or `string.Concat`
+
+**Safe by construction** (these take a `FormattableString` and EF Core parameterizes every `{value}`):
+- `FromSql()`, `FromSqlInterpolated()`, `ExecuteSql()`, `ExecuteSqlInterpolated()`, `SqlQuery<T>()`
+- Do **not** flag these. The only exception is when the argument is a pre-built string cast or converted to `FormattableString` (e.g. `FromSqlInterpolated($"{alreadyConcatenatedSql}")` or `FormattableStringFactory.Create(sql)`), which defeats the parameterization.
 
 ## 3. Stored Procedure Calls
 

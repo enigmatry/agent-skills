@@ -9,8 +9,13 @@ Analyze the codebase to identify missing minification/uglification configuration
 
 **Check angular.json configuration:**
 
+**First identify the builder** in `angular.json` (`projects.<name>.architect.build.builder`):
+
+- `@angular/build:application` or `@angular-devkit/build-angular:application` (esbuild, the default since Angular 17): `optimization` defaults to `true` and `sourceMap` to `false`. `buildOptimizer` and `vendorChunk` do not exist for this builder. A production configuration that contains only `budgets` and `outputHashing` is **compliant**; do not report missing keys.
+- `@angular-devkit/build-angular:browser` (webpack, legacy): the keys below apply.
+
 ```json
-// Look for production build configuration
+// Legacy webpack builder - look for production build configuration
 "configurations": {
   "production": {
     "optimization": true,  // MUST be true for production
@@ -19,16 +24,16 @@ Analyze the codebase to identify missing minification/uglification configuration
     "namedChunks": false,
     "extractLicenses": true,
     "vendorChunk": false,
-    "buildOptimizer": true // MUST be true for production
+    "buildOptimizer": true // MUST be true for production (webpack builder only)
   }
 }
 ```
 
 **Specific checks in angular.json:**
-- Verify `optimization` is set to `true` or has detailed configuration
-- Check `buildOptimizer` is `true` (enables advanced minification)
-- Ensure `sourceMap` is `false` (prevents source code exposure)
-- Verify production configuration exists and is properly configured
+- A finding is an **explicit** `"optimization": false` or `"sourceMap": true` in the configuration that the pipeline deploys
+- `"sourceMap": { "scripts": true, "hidden": true, "vendor": false, "sourcesContent": false }` is compliant when the `.map` files are kept server-side (error-tracking upload) and not published
+- Webpack builder only: check `buildOptimizer` is `true`
+- Check `defaultConfiguration` (defaults to `production` since Angular 12) and the configuration the pipeline actually passes to `ng build`
 
 **Detailed optimization configuration:**
 ```json
@@ -358,7 +363,8 @@ NODE_ENV=production npm run build
 optimization: { minimize: false }
 
 // WRONG - Development build deployed to production
-ng build  // without --configuration production
+ng build --configuration development
+// NOTE: a bare `ng build` has used the production configuration by default since Angular 12 and is NOT a finding
 
 // WRONG - Source maps in production
 devtool: 'source-map'
@@ -372,9 +378,9 @@ devtool: false
 // Verify environment variables
 {
   "scripts": {
-    "build:dev": "ng build",
+    "build:dev": "ng build --configuration development",
     "build:prod": "ng build --configuration production",
-    "build": "npm run build:prod"  // Default should be production
+    "build": "ng build"  // production by default since Angular 12
   }
 }
 ```
