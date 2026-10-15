@@ -4,8 +4,6 @@ Analyze the production application's SSL/TLS configuration to identify weak prot
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A04 Cryptographic Failures, A02 Security Misconfiguration · **ASVS 5.0:** V12 Secure Communication
-> **Owns:** Code-level TLS settings (`SslProtocols`, `TrustServerCertificate`, certificate validation callbacks) (also encountered in check 16)
-> **Defers to:** HSTS header → check 17 (security_headers.md)
 
 > **Hosting model:** this check depends on `HOSTING_MODEL` from SKILL.md Step 0b. `web.config` sections apply only when it is `iis`; for `linux` use the middleware or platform equivalents named in this file and do not report missing `web.config` entries; with the `edge` modifier the live `PRODUCTION_URL` response is the ground truth and `UseForwardedHeaders` must be configured.
 
@@ -137,17 +135,10 @@ Certificate hostname mismatch
 
 **✅ MUST be enabled:**
 ```
-HTTP Strict Transport Security (HSTS)
-  - max-age ≥ 31536000 (1 year)
-  - includeSubDomains
-  - preload (optional)
-
 Server Name Indication (SNI): Supported
 Secure Renegotiation: Supported
 Session resumption: Supported (for performance)
 ```
-
-HSTS is Owned by check 17 (security_headers.md); reference that finding instead of reporting it here. Record the SSL Labs HSTS result for context only.
 
 **✅ SHOULD be enabled:**
 ```
@@ -267,8 +258,6 @@ properties: {
 
 ## 10. Code-Level TLS Settings
 
-This check owns code-level TLS settings; check 16 (Cryptography) references these findings instead of reporting them.
-
 **Files to examine:** `*.cs`, `appsettings*.json`, `*.bicep`, pipeline variable files.
 
 **Search patterns:**
@@ -344,8 +333,6 @@ DROWN: ✅ Not vulnerable / ❌ VULNERABLE
 
 ### Security Features:
 ```
-HSTS: ✅ Enabled (max-age: 31536000) / ❌ Not enabled   (context only; the finding belongs to check 17)
-HSTS Preload: ✅ Eligible / ⚠️ Not eligible / ❌ Not enabled   (context only; the finding belongs to check 17)
 Forward Secrecy: ✅ Yes (all ciphers) / ⚠️ With some browsers / ❌ No
 OCSP Stapling: ✅ Enabled / ❌ Disabled
 ```
@@ -379,8 +366,6 @@ OCSP Stapling: ✅ Enabled / ❌ Disabled
 - ECDSA P-256/P-384 certificates (smaller handshakes; RSA key size above 2048 is not a finding either way)
 - Certificate Transparency compliance
 - Post-quantum hybrid key exchange (X25519MLKEM768) not offered — hygiene; default in current browsers, available on Windows Server 2025
-
-HSTS (missing header, short `max-age`, `preload` absent) is not rated here: it is Owned by check 17 (security_headers.md); reference that finding instead of reporting it here.
 
 ## 13. Testing Procedure
 

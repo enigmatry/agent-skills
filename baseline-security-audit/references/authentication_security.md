@@ -4,8 +4,6 @@ Analyze the codebase to verify that a standard, secure authentication protocol i
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A07 Authentication Failures, A01 Broken Access Control · **ASVS 5.0:** V6 Authentication, V8 Authorization, V10 OAuth and OIDC
-> **Owns:** Missing `[Authorize]` / no fallback authorization policy; Password policy; Swagger or OpenAPI reachable outside Development
-> **Defers to:** Role check present but no resource-level check (BFLA) → check 8 (idor.md); Password hashing → check 16 (cryptography_security.md)
 
 ## Core Security Principle
 **All API endpoints must require authentication by default. The application must use OpenID Connect with Authorization Code flow and PKCE. Custom authentication solutions are not acceptable; any deviation from a standard protocol is rated at least High (Critical when it allows authentication bypass).**
@@ -187,8 +185,6 @@ options.ClientSecret = "...";  // secrets can leak; certificates or managed iden
 
 Requiring authentication on every endpoint (§1) ensures a user is logged in. This section checks that the application also enforces *what* an authenticated user is allowed to do.
 
-A role or policy check that is present but not followed by a resource-level ownership check (BFLA) is owned by check 8 (idor.md); reference that finding instead of reporting it here.
-
 **Check for coarse-grained `[Authorize]` without role or policy restrictions:**
 ```csharp
 // BAD — any authenticated user can access admin functionality
@@ -265,7 +261,6 @@ The following settings cannot be verified from source code alone. Ask someone wi
 >    - Passwords screened against a breached/common-password blocklist
 >    - In Microsoft Entra ID (cloud-only users the built-in policy is fixed): confirm Entra Password Protection (global and custom banned lists) is enabled and password expiry is disabled
 >    - For local ASP.NET Core Identity accounts: `PasswordOptions.RequiredLength` ≥ 15 (or ≥ 8 with MFA), `RequireDigit`/`RequireUppercase`/`RequireNonAlphanumeric` = `false`, and a breached-password check (e.g. Pwned Passwords k-anonymity API)
->    - Password hashing (algorithm and work factor) is owned by check 16 (cryptography_security.md); reference that finding instead of reporting it here
 >
 > 3. **MFA** — Is MFA enforced for this application through a Conditional Access policy, preferably phishing-resistant (FIDO2/passkeys, Windows Hello for Business, certificate-based)?
 >    - Microsoft's mandatory MFA rollout covers Azure management portals and tooling only; it does not protect custom applications

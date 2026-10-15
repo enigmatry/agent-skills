@@ -1,16 +1,14 @@
 # Security Headers Configuration Analysis
 
-Analyze security headers to identify missing or misconfigured values that protect against common web vulnerabilities.
+Analyze response security headers and removal of version-disclosing headers to identify missing or misconfigured values that protect against common web vulnerabilities.
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A02 Security Misconfiguration · **ASVS 5.0:** V3 Web Frontend Security, V13 Configuration
-> **Owns:** HSTS header (also encountered in check 20); CSP, `X-XSS-Protection` and other response headers (also encountered in check 9); CORS policy (also encountered in check 19)
-> **Defers to:** —
 
 > **Hosting model:** this check depends on `HOSTING_MODEL` from SKILL.md Step 0b. `web.config` sections apply only when it is `iis`; for `linux` use the middleware or platform equivalents named in this file and do not report missing `web.config` entries; with the `edge` modifier the live `PRODUCTION_URL` response is the ground truth and `UseForwardedHeaders` must be configured.
 
 ## Core Security Principle
-**Security headers provide defense-in-depth protection against XSS, clickjacking, MIME-sniffing, and other attacks. Proper configuration of these headers is essential for web application security.**
+**Security headers provide defense-in-depth protection against XSS, clickjacking, MIME-sniffing, and other attacks. Proper configuration of these headers is essential for web application security. Headers that disclose the platform (`Server`, `X-Powered-By`) must be removed from all responses.**
 
 ## 1. Inspection Priority
 
@@ -349,7 +347,92 @@ app.Use(async (context, next) =>
 <!-- Missing headers entirely -->
 ```
 
-## 11. What to Report
+## 11. Version-Disclosing Headers (Server, X-Powered-By, X-AspNet-Version)
+
+**Information disclosure headers like `Server` and `X-Powered-By` reveal platform details and versions that attackers can use to identify known vulnerabilities. They must be removed from all HTTP responses (API and front-end). Every finding in this section is rated Low (information disclosure with no exploit path on its own).**
+
+**Headers to remove:**
+- **Server** - Reveals web server type and version (e.g., "Microsoft-IIS/10.0")
+- **X-Powered-By** - Reveals framework and version (e.g., "ASP.NET", "ASP.NET Core 6.0")
+- **X-AspNet-Version** - Reveals specific ASP.NET version (e.g., "4.0.30319") — legacy (.NET Framework), not expected on this stack
+- **X-AspNetMvc-Version** - Reveals ASP.NET MVC version — legacy (.NET Framework), not expected on this stack
+
+> `X-AspNet-Version`, `X-AspNetMvc-Version` and `<httpRuntime enableVersionHeader="false" />` exist only on .NET Framework. ASP.NET Core never emits these headers, so their absence (and the absence of `enableVersionHeader`) is **not** a finding on an ASP.NET Core project; only report them if the live response actually contains them.
+
+**Files to examine:** the API and front-end `web.config` / `Web.config` files and their `web.release.config` transforms listed in section 2 (the removal configuration must be present in both apps), plus `Program.cs` / `Startup.cs` and `appsettings*.json` for the Kestrel setting.
+
+On `linux` hosting `web.config` is ignored: the equivalent is `AddServerHeader = false` on Kestrel (below) and, with the `edge` modifier, a Front Door rules-engine or Application Gateway rewrite rule that strips `Server` / `X-Powered-By` at the edge.
+
+**GOOD configuration - web.config (both API and front-end):**
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <!-- Remove Server header -->
+    <security>
+      <requestFiltering removeServerHeader="true" />
+    </security>
+
+    <!-- Remove X-Powered-By header -->
+    <httpProtocol>
+      <customHeaders>
+        <remove name="X-Powered-By" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>
+```
+
+**For legacy .NET Framework applications only (not expected on this stack), also add to web.config:**
+```xml
+<configuration>
+  <system.web>
+    <!-- Remove X-AspNet-Version header -->
+    <httpRuntime enableVersionHeader="false" />
+  </system.web>
+
+  <system.webServer>
+    <security>
+      <requestFiltering removeServerHeader="true" />
+    </security>
+
+    <httpProtocol>
+      <customHeaders>
+        <remove name="X-Powered-By" />
+        <remove name="X-AspNet-Version" />
+        <remove name="X-AspNetMvc-Version" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>
+```
+
+**ASP.NET Core / Kestrel (Program.cs/Startup.cs):**
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Configure Kestrel to remove Server header
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    serverOptions.AddServerHeader = false;
+});
+
+var app = builder.Build();
+app.Run();
+```
+
+> **Do not accept middleware that calls `Response.Headers.Remove("Server")` as a remediation.** Kestrel adds its `Server` header when the response starts, after middleware has run, so only `AddServerHeader = false` removes it. Under IIS (in-process or out-of-process) the `Server` and `X-Powered-By` headers are added by IIS after the ASP.NET Core pipeline completes, so application code cannot remove them; only `removeServerHeader="true"` on `<requestFiltering>` and `<remove name="X-Powered-By" />` under `<httpProtocol><customHeaders>` in `web.config` work. Report such middleware as a non-working remediation.
+
+**Alternative - appsettings.json configuration:**
+```json
+{
+  "Kestrel": {
+    "AddServerHeader": false
+  }
+}
+```
+
+## 12. What to Report
 
 **Severity per header** (impact-based; the same header carries the same severity on the front-end and on the API):
 
@@ -364,6 +447,8 @@ app.Use(async (context, next) =>
 | `X-Frame-Options` missing while CSP `frame-ancestors` is present, or misaligned with it | Low |
 | HSTS `preload` absent | Low |
 | `Referrer-Policy` absent (browser default `strict-origin-when-cross-origin` applies) | Low |
+| `Server`, `X-Powered-By`, `X-AspNet-Version` or `X-AspNetMvc-Version` present in a live response (version information disclosure) | Low |
+| `Response.Headers.Remove("Server")` middleware used as the remediation for version-disclosing headers (non-working; see section 11) | Low |
 
 **For each missing or misconfigured header:**
 
@@ -440,7 +525,17 @@ Finding: CDN Resources Missing SRI
 - Recommendation: Add integrity="sha384-..." and crossorigin="anonymous"
 ```
 
-## 12. Search Patterns
+```
+Finding: Server Header Discloses IIS Version
+- Header: Server
+- Location: API responses (all endpoints)
+- Current Value: Server: Microsoft-IIS/10.0
+- Issue: Server header reveals IIS version
+- Risk: Low - Attackers can identify platform and target known IIS 10.0 vulnerabilities
+- Recommendation: Add removeServerHeader="true" to web.config under <security><requestFiltering>
+```
+
+## 13. Search Patterns
 
 **Search web.config for security headers:**
 ```xml
@@ -453,6 +548,11 @@ Referrer-Policy
 Cache-Control
 Permissions-Policy
 Access-Control-Allow-Origin
+
+<!-- Check for version-header removal -->
+removeServerHeader
+<remove name="X-Powered-By" />
+enableVersionHeader
 
 <!-- Check for unsafe CSP values -->
 unsafe-inline
@@ -471,6 +571,8 @@ UseXContentTypeOptions
 UseReferrerPolicy
 UseCsp
 AddCors
+AddServerHeader
+Response.Headers.Remove
 ```
 
 **Search Angular index.html:**
@@ -484,7 +586,7 @@ integrity=
 crossorigin=
 ```
 
-## 13. Complete Configuration Examples
+## 14. Complete Configuration Examples
 
 **Front-end web.config (Angular application):**
 ```xml
@@ -507,7 +609,7 @@ crossorigin=
 
 **API (web.config or ASP.NET Core middleware):** use the header block in section 10 unchanged; it is not repeated here.
 
-## 14. Best Practices Verification
+## 15. Best Practices Verification
 
 **Verify the application follows:**
 
@@ -530,21 +632,27 @@ crossorigin=
 - Referrer-Policy: no-referrer
 - Permissions-Policy configured
 
+✅ **Version-disclosing headers (API and front-end):**
+- `Server` removed via `removeServerHeader="true"` in web.config (`AddServerHeader = false` on Kestrel for `linux`)
+- `X-Powered-By` removed via `<remove name="X-Powered-By" />` in web.config
+- `enableVersionHeader="false"` for legacy .NET Framework applications only
+- Configuration applied to both API and front-end web.config files
+
 ✅ **General:**
 - Headers configured in web.config or middleware
 - No conflicting header values
 - CORS properly configured (not *)
 - Regular security header audits
 
-## 15. Testing Security Headers
+## 16. Testing Security Headers
 
 **Manual verification:**
 
 1. **Browser DevTools:**
    - Open Network tab
    - Refresh page
-   - Click on document request
-   - Check Response Headers section
+   - Click on document request (and an API call)
+   - Check Response Headers section; verify `Server` and `X-Powered-By` are absent
 
 2. **Online tools:**
    - https://securityheaders.com
@@ -554,7 +662,12 @@ crossorigin=
 3. **Command line (curl):**
    ```bash
    curl -I https://your-app.com
+
+   # Version-disclosing headers: should return nothing if they are removed correctly
+   curl -I https://your-app.com | grep -i "server\|powered"
+   curl -I https://api.your-app.com/api/endpoint | grep -i "server\|powered"
    ```
+   PowerShell: `Invoke-WebRequest -Uri "https://your-app.com" -Method Head | Select-Object -ExpandProperty Headers` and look for `Server` or `X-Powered-By` in the output.
 
 4. **Verify CSP:**
    - Check browser console for CSP violations

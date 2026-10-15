@@ -4,8 +4,6 @@ Scan the codebase for sensitive data being transmitted in URL query parameters, 
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A04 Cryptographic Failures (data exposure) · **ASVS 5.0:** V14 Data Protection
-> **Owns:** query-string values written to access logs or telemetry (also encountered in 6)
-> **Defers to:** caller-supplied id used in a query without an ownership or tenant check → check 8 (idor.md); missing PKCE on the OAuth authorization-code flow → check 23 (authentication_security.md)
 
 ## Core Security Principle
 **Sensitive data must never be placed in URL query parameters. Authentication tokens, credentials, and PII must be transmitted in request headers or the request body using POST over HTTPS.**
@@ -19,7 +17,7 @@ Search for query parameters that carry:
 - JWT or bearer tokens
 - OAuth access or refresh tokens
 
-Not findings: opaque ids and REST path ids (`/users/{id}`). A sequential id that the server trusts for authorization is a caller-supplied id used in a query without an ownership check, owned by check 8 (idor.md); reference that finding instead of reporting it here. The OAuth `?code=` on the redirect URI is by design: flag only a missing PKCE (owned by check 23, authentication_security.md) or an authorization code written to logs.
+Not findings: opaque ids and REST path ids (`/users/{id}`). See check 7 (idor.md) for a sequential id that the server trusts for authorization without an ownership check. The OAuth `?code=` on the redirect URI is by design: flag only an authorization code written to logs. See check 19 (authentication_security.md) for a missing PKCE.
 
 ## 2. Personal Identifiable Information (PII) in URLs
 
@@ -66,8 +64,6 @@ Search for query parameters that carry:
 - Bookmarkable or shareable URLs containing private information
 
 ## 7. Logging and Monitoring Risks
-
-This check owns query-string values in access logs, telemetry and analytics; check 6 (sensitive_data_logging.md) defers to it.
 
 - URLs with sensitive query parameters being written to access logs
 - Browser history exposure of sensitive URL parameters

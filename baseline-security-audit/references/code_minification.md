@@ -4,8 +4,6 @@ Analyze the codebase to identify missing minification/uglification configuration
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A02 Security Misconfiguration · **ASVS 5.0:** V13 Configuration, V3 Web Frontend Security
-> **Owns:** Source maps served publicly (also encountered in check 18)
-> **Defers to:** —
 
 ## Core Security Principle
 **All code that is sent to the user (HTML, CSS, JavaScript) should be minified in production builds. Minification itself is not a security control; what is security-relevant is source-map exposure (a publicly served `.map` file hands out the original source) and comments or debug code (`debugger;` statements, internal URLs or credentials in comments) that leak from unminified bundles.**

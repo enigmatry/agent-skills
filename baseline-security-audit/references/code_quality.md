@@ -4,8 +4,6 @@ Review the project's build pipeline output and SonarQube dashboard to identify s
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A03 Software Supply Chain Failures, A06 Insecure Design · **ASVS 5.0:** V15 Secure Coding and Architecture
-> **Owns:** —
-> **Defers to:** —
 
 ## Core Security Principle
 **Security vulnerabilities and hotspots flagged by static analysis tools must be resolved before release. Build warnings related to security or known vulnerabilities are treated as security findings. Other quality issues (bugs, code coverage) are reported separately as technical debt.**

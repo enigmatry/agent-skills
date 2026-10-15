@@ -4,8 +4,6 @@ Scan the codebase for packages with known security vulnerabilities, deprecated p
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A03 Software Supply Chain Failures · **ASVS 5.0:** V15 Secure Coding and Architecture
-> **Owns:** —
-> **Defers to:** —
 
 ## Core Security Principle
 **All third-party dependencies must be free of known security vulnerabilities. Vulnerable, deprecated, or significantly outdated packages must be updated or replaced.**

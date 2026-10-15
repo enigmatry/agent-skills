@@ -4,8 +4,6 @@ Analyze the codebase to verify that sensitive fields stored in the database are 
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A04 Cryptographic Failures · **ASVS 5.0:** V14 Data Protection, V11 Cryptography
-> **Owns:** encryption state of a sensitive database column (also encountered in 14, 16)
-> **Defers to:** hard-coded, static or unrotated encryption key → check 16 (cryptography_security.md); password hashing → check 16 (cryptography_security.md)
 
 ## Core Security Principle
 **Fields that must remain unreadable to database administrators and anyone with direct database access — such as credit card numbers, social security numbers, and bank account details — must be encrypted at the column level or encrypted/decrypted transparently by the application. Passwords are out of scope here; they must be hashed (see Cryptography Security check).**
@@ -47,7 +45,7 @@ public byte[] BiometricData { get; set; }
 - `*DbContext.cs` — which entities are mapped
 - `Migrations/*.cs` — to see column types and names added over time
 
-**Note:** Passwords must be *hashed*, not encrypted. A `Password` field that is encrypted (or stored in plain text) rather than hashed is a password-hashing finding owned by check 16 (cryptography_security.md); reference that finding instead of reporting it here, and do not also report the column under this check.
+**Note:** Passwords must be *hashed*, not encrypted; they are out of scope here.
 
 ## 2. SQL Server Always Encrypted
 
@@ -139,16 +137,6 @@ public class SensitiveDataService
 
 Encryption is only as strong as the protection of its keys.
 
-**RED FLAGS:**
-```csharp
-// CRITICAL — hardcoded encryption key
-private static readonly byte[] Key = new byte[] { 0x12, 0x34, ... };
-private const string EncryptionKey = "MySuperSecretKey123!";
-
-// BAD — key derived from application configuration without key vault
-var key = Encoding.UTF8.GetBytes(config["Encryption:Key"]);
-```
-
 **GOOD:**
 ```csharp
 // Key retrieved from Azure Key Vault at runtime
@@ -156,11 +144,9 @@ var keyBytes = await keyVaultClient.GetSecretAsync("FieldEncryptionKey");
 ```
 
 **Check for:**
-- Encryption keys stored in `appsettings.json` or source code rather than a key vault
-- Keys derived from weak or guessable strings
 - No key rotation strategy in place
 
-A hard-coded or static key, or a key kept in `appsettings*.json` or source, is owned by check 16 (cryptography_security.md) and rated Critical there; reference that finding instead of reporting it here. The only key-management finding reported under this check is "no key rotation evidence" for the column-encryption key = Low.
+Report missing key-rotation evidence for the column-encryption key as Low; hard-coded or static keys are reported by check 13 (cryptography_security.md).
 
 ## 6. Transparent Data Encryption (TDE)
 
@@ -194,5 +180,5 @@ For each finding, provide:
 - **Entity/table** and **field/column** name (for column-level findings), or **infrastructure file** and line number (for TDE findings)
 - **Data type**: SSN, credit card, IBAN, biometric, medical record, TDE configuration, etc.
 - **Current state**: plain text, application-encrypted, column-encrypted (Always Encrypted), or TDE disabled
-- **Severity** (by data class of an unencrypted column): Critical (CVV/CVC or full track data stored at all; full PAN stored in clear) / High (BSN/SSN, bank account, IBAN, biometric or health data unencrypted; TDE explicitly disabled) / Medium (other PII unencrypted) / Low (no key rotation evidence for the column-encryption key). A hard-coded or static key is reported under check 16, not here.
+- **Severity** (by data class of an unencrypted column): Critical (CVV/CVC or full track data stored at all; full PAN stored in clear) / High (BSN/SSN, bank account, IBAN, biometric or health data unencrypted; TDE explicitly disabled) / Medium (other PII unencrypted) / Low (no key rotation evidence for the column-encryption key). A hard-coded or static key is reported under check 13 (cryptography_security.md), not here.
 - **Recommendation**: preferred approach (Always Encrypted, EF Core value converter, or Data Protection API for column-level; ensure TDE is enabled for database-level) and any key management improvements required

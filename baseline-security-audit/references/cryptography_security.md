@@ -4,8 +4,6 @@ Analyze the codebase to identify weak or insecure cryptographic implementations 
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A04 Cryptographic Failures · **ASVS 5.0:** V11 Cryptography
-> **Owns:** hard-coded, static or unrotated encryption key (also encountered in 21); password hashing (also encountered in 10, 23)
-> **Defers to:** encryption state of a sensitive database column → check 21 (database_field_encryption.md); code-level TLS settings (`SslProtocols`, `ServicePointManager.SecurityProtocol`, `ServerCertificateCustomValidationCallback`, `TrustServerCertificate`) → check 20 (ssl_tls_configuration.md); password policy → check 23 (authentication_security.md)
 
 ## Core Security Principle
 **Industry-standard and secure algorithms must be used for hashing and encrypting data with strong keys. Weak cryptographic algorithms can be easily broken, exposing sensitive data.**
@@ -43,7 +41,7 @@ SHA1.Create().ComputeHash(...)          // Broken
 SHA256.Create().ComputeHash(...)        // Too fast, no salt
 ```
 
-**Severity:** MD5 or SHA-1 for passwords = Critical; unsalted or un-iterated SHA-2, or PBKDF2 below 100,000 iterations = High. Password policy (length, lockout, breached-password checks) is owned by check 23 (authentication_security.md); reference that finding instead of reporting it here.
+**Severity:** MD5 or SHA-1 for passwords = Critical; unsalted or un-iterated SHA-2, or PBKDF2 below 100,000 iterations = High. See check 19 (authentication_security.md) for password policy.
 
 ## 2. General Data Hashing
 
@@ -101,8 +99,6 @@ aes.IV = new byte[16];                  // BAD - Zero IV
 aes.IV = Encoding.UTF8.GetBytes("..."); // BAD - Static IV
 ```
 
-Code-level TLS settings (`SslProtocols`, `ServicePointManager.SecurityProtocol`, `ServerCertificateCustomValidationCallback`, `TrustServerCertificate`) are owned by check 20 (ssl_tls_configuration.md); reference that finding instead of reporting it here.
-
 ## 4. Random Number Generation
 
 **GOOD - Cryptographically secure:**
@@ -149,7 +145,7 @@ aes.KeySize = 256;
 aes.GenerateKey();
 ```
 
-**Severity:** a hard-coded or static key in source or configuration (`appsettings*.json`, Bicep parameters, pipeline variables) = Critical; a key that comes from a vault or Data Protection but has no documented rotation = Low. Whether a sensitive database column is encrypted at all is owned by check 21 (database_field_encryption.md); reference that finding instead of reporting it here.
+**Severity:** a hard-coded or static key in source or configuration (`appsettings*.json`, Bicep parameters, pipeline variables) = Critical; a key that comes from a vault or Data Protection but has no documented rotation = Low.
 
 ## 6. Angular Client-Side Cryptography
 

@@ -4,8 +4,6 @@ Scan the codebase for Insecure Direct Object Reference vulnerabilities where API
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A01 Broken Access Control · **ASVS 5.0:** V8 Authorization
-> **Owns:** Caller-supplied id used in a query without an ownership or tenant check; Role check present but no resource-level check (BFLA)
-> **Defers to:** Missing `[Authorize]` / no fallback authorization policy → check 23 (authentication_security.md); Mass assignment / over-posting of `Id`, `OwnerId`, `TenantId`, `Role` (BOPLA) → check 10 (input_validation.md); Path traversal in file access → check 10 (input_validation.md)
 
 ## Core Security Principle
 **Every request that accesses a resource by ID must verify that the authenticated user is authorized to access that specific resource. Authentication (confirming who you are) is not the same as authorization (confirming what you may access).**
@@ -24,7 +22,7 @@ Look for data access without ownership or permission validation:
 - Controllers that fetch objects by ID without checking user ownership
 - Database queries using caller-supplied IDs without access control validation
 - Repository methods like `GetById(id)` called without a prior ownership check
-- File access operations using caller-provided IDs that resolve to another user's file. A caller-controlled *path* reaching the file system is path traversal: owned by check 10 (input_validation.md); reference that finding instead of reporting it here.
+- File access operations using caller-provided IDs that resolve to another user's file
 
 ## 3. Vulnerable Code Patterns
 
@@ -32,10 +30,6 @@ Flag these patterns for closer review:
 ```csharp
 // Direct lookup without ownership check
 var document = await context.Documents.FindAsync(documentId);
-
-// File access with user-controlled path — path traversal is owned by check 10 (input_validation.md);
-// flag here only when the id/path resolves to a file belonging to another user or tenant
-var content = File.ReadAllText(filePath);
 
 // Bulk query without user-scoped filter
 return await context.Orders.Where(o => ids.Contains(o.Id)).ToListAsync();
@@ -57,7 +51,7 @@ return await context.Orders.Where(o => ids.Contains(o.Id)).ToListAsync();
 
 ## 6. Framework-Specific Checks
 
-- **ASP.NET Core**: Missing resource-based authorization policies (`IAuthorizationService.AuthorizeAsync(user, resource, policy)`, `IAuthorizationHandler<TRequirement, TResource>`). A missing `[Authorize]` attribute or fallback policy is owned by check 23 (authentication_security.md); reference that finding instead of reporting it here.
+- **ASP.NET Core**: Missing resource-based authorization policies (`IAuthorizationService.AuthorizeAsync(user, resource, policy)`, `IAuthorizationHandler<TRequirement, TResource>`)
 - **Entity Framework**: Direct `context` access without a user-scoped filter
 - **Repository patterns**: Generic repositories lacking built-in ownership enforcement
 - **Service layer**: Business logic that does not validate resource ownership before returning data

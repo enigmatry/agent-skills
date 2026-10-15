@@ -4,8 +4,6 @@ Analyze the codebase to identify insecure usage of cookies and local storage tha
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A02 Security Misconfiguration, A07 Authentication Failures · **ASVS 5.0:** V7 Session Management, V3 Web Frontend Security
-> **Owns:** —
-> **Defers to:** —
 
 > **Hosting model:** this check depends on `HOSTING_MODEL` from SKILL.md Step 0b. `web.config` sections apply only when it is `iis`; for `linux` use the middleware or platform equivalents named in this file and do not report missing `web.config` entries; with the `edge` modifier the live `PRODUCTION_URL` response is the ground truth and `UseForwardedHeaders` must be configured.
 
@@ -539,4 +537,4 @@ SameSite = SameSiteMode.None, Secure = true
 
 3. **Network tab review** (or the `curl` output above):
    - Cookies are sent only over HTTPS requests
-   - Tokens travel in the `Authorization` header or a cookie, never in the query string (query-string tokens are Owned by check 7 (sensitive_query_strings.md); reference that finding instead of reporting it here)
+   - Tokens travel in the `Authorization` header or a cookie, never in the query string. See check 6 (sensitive_query_strings.md) for tokens in query strings.

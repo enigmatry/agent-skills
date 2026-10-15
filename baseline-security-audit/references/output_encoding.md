@@ -4,8 +4,6 @@ Analyze the codebase to identify potential Cross-Site Scripting (XSS) vulnerabil
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A05 Injection · **ASVS 5.0:** V1 Encoding and Sanitization, V3 Web Frontend Security
-> **Owns:** —
-> **Defers to:** CSP, `X-XSS-Protection` and other response headers → check 17 (security_headers.md)
 
 ## Core Security Principle
 **All output that is to be rendered in a browser should be encoded. Most UI frameworks do this by default, but developers can bypass these protections, creating security vulnerabilities.**
@@ -196,9 +194,6 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 
 **Verify that the application:**
 - Uses framework default encoding (don't disable it)
-- Implements Content Security Policy (CSP) headers. Owned by check 17 (security_headers.md); reference that finding instead of reporting it here.
-- Validates and sanitizes input on the server side. Owned by check 10 (input_validation.md); reference that finding instead of reporting it here.
-- Uses secure HTTP headers (X-XSS-Protection, X-Content-Type-Options). Owned by check 17 (security_headers.md); reference that finding instead of reporting it here.
 - Implements proper output encoding for each context (HTML, JavaScript, URL, CSS)
 - Has documented justification for any security bypasses
 - Performs regular security testing/scanning

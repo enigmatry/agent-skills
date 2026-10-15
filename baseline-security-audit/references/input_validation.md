@@ -4,8 +4,6 @@ Analyze the codebase to identify missing or insufficient input validation that c
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A05 Injection, A06 Insecure Design · **ASVS 5.0:** V2 Validation and Business Logic
-> **Owns:** Mass assignment / over-posting of `Id`, `OwnerId`, `TenantId`, `Role` (BOPLA); Path traversal in file access
-> **Defers to:** Caller-supplied id used in a query without an ownership or tenant check → check 8 (idor.md); Password policy → check 23 (authentication_security.md); Password hashing → check 16 (cryptography_security.md)
 
 ## Core Security Principle
 **All user input fields should be validated. Input validation must be implemented at least server-side for all input fields, and preferably also client-side for better user experience and defense-in-depth.**
@@ -155,14 +153,7 @@ CustomValidators
 - Virus scanning — not a code check: ask the user whether uploads are scanned; do not report it as a finding
 - Filename sanitization (a caller-controlled path reaching the file system is path traversal, owned here)
 
-**Passwords (NIST SP 800-63B-4, July 2025):**
-Password policy is owned by check 23 (authentication_security.md) and password hashing by check 16 (cryptography_security.md); reference those findings instead of reporting them here.
-- Minimum length 15 characters for single-factor passwords, 8 when MFA is enforced
-- Maximum length at least 64 characters (prevent DoS with a sane upper bound, e.g. 128)
-- No composition rules (NIST prohibits requiring mixed case, digits or symbols)
-- No periodic expiry; rotate only on evidence of compromise
-- Screened against a breached/common-password blocklist
-- Password confirmation matching
+**Passwords:** length and composition rules are owned by check 19 (authentication_security.md); hashing by check 13 (cryptography_security.md). Here only check that the password field is bound server-side and has a maximum length.
 
 **Phone numbers:**
 - Format validation
@@ -254,7 +245,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - Email/URL inputs without format validation
 - Missing client-side validation while server-side validation exists (Low)
 - Direct database entity binding without DTO layer
-- Query string/route parameters used without validation (a route or query id used in a query without an ownership or tenant check is owned by check 8 (idor.md); reference that finding instead of reporting it here)
+- Query string/route parameters used without validation
 
 **For each finding, provide:**
 - File path and line number
@@ -336,7 +327,6 @@ HttpContext.Request
 
 **Business Logic Validation:**
 - Check for business rule validation beyond basic format checks
-- Verify authorization rules (user can only update their own data). Owned by check 8 (idor.md); reference that finding instead of reporting it here.
 - Check for concurrent modification handling
 - Validate relationships and referential integrity
 

@@ -4,8 +4,6 @@ Scan the codebase for SQL injection vulnerabilities where user input is incorpor
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A05 Injection · **ASVS 5.0:** V1 Encoding and Sanitization
-> **Owns:** —
-> **Defers to:** Caller-supplied id used in a query without an ownership or tenant check → check 8 (idor.md)
 
 ## Core Security Principle
 **All database queries must use parameterized queries or prepared statements. User input must never be concatenated or interpolated directly into SQL strings.**
@@ -49,7 +47,6 @@ Check for unsafe raw queries within ORMs:
 Identify all user-controlled input flowing into queries:
 - Form fields, API request bodies, and query string parameters
 - URL route parameters used in queries
-  - A caller-supplied id used in a query without an ownership or tenant check is a different finding: owned by check 8 (idor.md); reference that finding instead of reporting it here.
 - File-upload metadata that feeds into SQL
 - Configuration values that might be tampered with
 

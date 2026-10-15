@@ -4,8 +4,6 @@ Analyze the codebase for secure exception handling that logs complete error deta
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A10 Mishandling of Exceptional Conditions · **ASVS 5.0:** V16 Security Logging and Error Handling
-> **Owns:** Global exception handler present and logging; Exception details or stack traces in HTTP responses
-> **Defers to:** Secrets, tokens or PII inside log messages or destructured objects → check 6 (sensitive_data_logging.md)
 
 ## Core Security Requirement:
 **All unhandled exceptions must be logged with full stack traces, but actual error details and stack traces must NEVER be visible to users in non-development environments, including API responses.**
@@ -16,7 +14,7 @@ Analyze the codebase for secure exception handling that logs complete error deta
 - Full stack traces logged using `logger.LogError(exception, message)`
 - Proper exception context (request details, user info, correlation IDs)
 
-This check owns "global exception handler present and logging" and "exception details in HTTP responses". Log sinks, levels and console output are owned by check 5 (logging.md); secrets, tokens or PII inside the logged message or a destructured exception object are owned by check 6 (sensitive_data_logging.md); reference those findings instead of reporting them here.
+Full stack traces go to the log sink; secrets, tokens or PII inside the logged message or a destructured exception object must be redacted (see check 5 (logging.md)).
 
 **Search for:** `UseExceptionHandler`, `AddExceptionHandler<T>()` / `IExceptionHandler` (.NET 8+), `AddProblemDetails()` / `IProblemDetailsService`, `UseStatusCodePages()`, `ExceptionFilterAttribute`, `OnException`, global middleware registration
 

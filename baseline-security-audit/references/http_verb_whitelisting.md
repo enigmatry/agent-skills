@@ -4,8 +4,6 @@ Analyze the application to ensure only necessary HTTP verbs are allowed, reducin
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A02 Security Misconfiguration · **ASVS 5.0:** V4 API and Web Service, V13 Configuration
-> **Owns:** —
-> **Defers to:** CORS policy → check 17 (security_headers.md)
 
 > **Hosting model:** this check depends on `HOSTING_MODEL` from SKILL.md Step 0b. `web.config` sections apply only when it is `iis`; for `linux` use the middleware or platform equivalents named in this file and do not report missing `web.config` entries; with the `edge` modifier the live `PRODUCTION_URL` response is the ground truth and `UseForwardedHeaders` must be configured.
 
@@ -79,7 +77,7 @@ public class ProductsController : ApiController
 - **PUT** - Update/replace resources (commonly used)
 - **DELETE** - Delete resources (commonly used)
 - **PATCH** - Partial update (less common)
-- **OPTIONS** - CORS preflight (required whenever the Angular front-end is served from a different origin than the API, which is the normal setup). The CORS policy itself (allowed origins, credentials) is Owned by check 17 (security_headers.md); reference that finding instead of reporting it here.
+- **OPTIONS** - CORS preflight (required whenever the Angular front-end is served from a different origin than the API, which is the normal setup).
 - **HEAD** - Must be allowed whenever GET is allowed. It never appears in controller attributes but is used by Azure Front Door and Application Gateway health probes (Front Door defaults to HEAD), the IIS static-file handler and uptime monitors; blocking it can take an origin out of rotation.
 
 **Verbs that should typically be blocked:**
