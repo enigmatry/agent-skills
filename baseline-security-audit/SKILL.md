@@ -133,11 +133,11 @@ Invoke this skill by asking for a security audit:
 
 ## Execution Flow
 
-### Step 0 — Select Checks to Run (ask once, at the very start)
+### Step 0 — Select Checks and Collect the Production URL (one prompt, at the very start)
 
-Before doing anything else, present the full list of available checks and ask the user which ones to run:
+Before doing anything else, present the full list of available checks and ask one question that collects both the selection and the production URL:
 
-> "Which security checks would you like to run?
+> "Which security checks would you like to run, and what is the production URL?
 >
 > | # | Check |
 > |---|-------|
@@ -161,17 +161,9 @@ Before doing anything else, present the full list of available checks and ask th
 > | 18 | Code Quality |
 > | 19 | Authentication Security |
 >
-> Reply with **`all`** to run all checks, or provide a comma-separated list of numbers (e.g. `1, 3, 5`) to run a specific subset."
+> Reply with **`all`** or a comma-separated list of numbers (e.g. `1, 3, 5`). Checks 14 (Security Headers) and 16 (SSL/TLS Configuration) inspect the live site: add the production URL on the same line (e.g. `all, https://app.example.com`) or leave it out to fall back to static analysis."
 
-Store the selected check numbers as `SELECTED_CHECKS`. Only run, report on, and create Jira stories for the selected checks.
-Do **not** ask again during the audit.
-
-If `SELECTED_CHECKS` includes **14 (Security Headers)** or **16 (SSL/TLS Configuration)** — or if `all` was selected — ask the user for the production URL immediately after the check selection:
-
-> "Checks 14 and/or 16 require a live URL. What is the production URL? (leave blank to skip live inspection and fall back to static analysis)"
-
-Store the answer as `PRODUCTION_URL`. If the user leaves it blank, set `PRODUCTION_URL` to empty and proceed with static analysis for both checks.
-Do **not** ask for this URL again during the audit.
+Store the selected check numbers as `SELECTED_CHECKS` and the URL as `PRODUCTION_URL` (empty when none was given). Only run, report on, and create Jira stories for the selected checks. Do **not** ask either question again during the audit; if the user gives no URL and checks 14 or 16 are selected, run their static analysis and say so in the findings.
 
 ### Step 0b — Determine the Hosting Model (once, before running checks)
 
@@ -185,16 +177,26 @@ Checks 10, 12, 14, 15 and 16 depend on where the application runs, because `web.
 
 Store the result as `HOSTING_MODEL` and do **not** ask again.
 
+### Step 1 — Run the Selected Checks
+
+**Scope once.** Before the first check, list what will be audited: every deployable project (`*.csproj` of web apps, APIs and workers; every `angular.json` project), the pipeline files (`azure-pipelines*.yml`, `**/*.yml` under a pipelines folder), infrastructure (`*.bicep`, `*.parameters.json`), and `nuget.config` / `package.json`. In a monorepo cover every deployable project; name any folder you deliberately leave out (samples, archived code, generated code). Reuse this list for every check.
+
+**For each check in `SELECTED_CHECKS`, in numeric order:**
+
+1. **Read the check's reference file in full** before searching. The file states what to look for, what counts as a finding, the severity of each finding and the remediation; do not work from the check's one-line description.
+2. **Apply the audit context.** Follow the file's `Hosting model` line with `HOSTING_MODEL`, and use `PRODUCTION_URL` where the file calls for live inspection.
+3. **Search, then confirm.** Run the file's `Files to examine` globs and `Search patterns` first, then read every hit in context before rating it. A pattern match is a candidate, not a finding; the file's "not a finding" rules apply.
+4. **Rate and record** every confirmed finding in the format from the Severity Scale section: Severity · check number and name · location (`path:line`, header name, or URL) · what was found · remediation · OWASP Top 10:2025 category.
+5. **Collect human-input questions.** Where the file marks an item as "ask the user" or "requires human input", gather those questions and ask them in one batch at the end of the check, never one at a time in the middle of it.
+6. **Close the check with a result block**, even when nothing was found:
+
+   > **Check N — <name>:** `<k> findings` or `No findings`.
+   > Searched: <globs and patterns used, files or endpoints inspected, live URL or static analysis>.
+   > Not verifiable from code: <human-input items still open, or "none">.
+
+Checks may run in parallel (for example one subagent per check) when the environment supports it; every runner gets `SELECTED_CHECKS`, `HOSTING_MODEL`, `PRODUCTION_URL`, the scope list and the full reference file, and the audit report is assembled in numeric order regardless of completion order.
+
 ## Jira Integration
-
-### Step 1 — Collect the Jira Project Code (ask once, at the very start)
-
-After confirming the selected checks, ask the user exactly once:
-
-> "What is the Jira project code where security stories should be created? (e.g. `SEC`, `PROJ`)"
-
-Store the answer as `JIRA_PROJECT_CODE` and reuse it for all subsequent story creation calls.
-Do **not** ask again during the audit.
 
 ### Step 2 — Jira Priority Mapping
 
@@ -218,8 +220,10 @@ After **all selected checks** are complete, output a numbered consolidated table
 
 Then ask the user exactly once:
 
-> "Which findings should be created as Jira stories?
-> Reply with **`all`** to create stories for all findings, a comma-separated list of numbers (e.g. `1, 3, 5`), or **`none`** to skip Jira creation."
+> "Which findings should be created as Jira stories, and in which Jira project?
+> Reply with **`all`** or a comma-separated list of numbers (e.g. `1, 3, 5`) followed by the project code (e.g. `1, 3, 5 in SEC`), or **`none`** to skip Jira creation."
+
+Store the project code as `JIRA_PROJECT_CODE`. If the user gives a selection without a project code, ask for the code once. If the answer is `none`, stop here: do not ask for a project code and skip Steps 4 and 5.
 
 Do **not** create any Jira stories before receiving this answer.
 
@@ -235,17 +239,17 @@ For each finding selected by the user, create one Jira story using the `createJi
 | Field               | Value                                                                                  |
 |---------------------|----------------------------------------------------------------------------------------|
 | `cloudId`           | `CLOUD_ID`                                                                             |
-| `projectKey`        | `JIRA_PROJECT_CODE` (collected above)                                                  |
+| `projectKey`        | `JIRA_PROJECT_CODE` (collected in Step 3)                                              |
 | `issueTypeName`     | `Story`                                                                                |
 | `summary`           | `[Security Audit] <Check Name>: <short finding title>`                                 |
 | `description`       | Finding location (file + line number), description of the issue, remediation steps, and the line `OWASP Top 10:2025: <category>` (Markdown) |
 | `additional_fields` | `{"labels": ["BaselineSecurity"], "priority": {"name": "<mapped priority>"}}` — labels and priority are only accepted through this object |
 
-**Example summary:** `[Security Audit] Secrets Management: Hardcoded API key in appsettings.json`
+**Example summary:** `[Security Audit] Secrets and Credentials: Hardcoded API key in appsettings.json`
 
 After each `createJiraIssue` call succeeds:
 
-1. Echo the created story key inline in the audit output, e.g.: *(→ created [PROJ-42](https://enigmatry.atlassian.net/browse/PROJ-42))*
+1. Echo the created story key inline in the audit output as a link built from the site URL that `getAccessibleAtlassianResources` returned, e.g.: *(→ created [PROJ-42](<site URL>/browse/PROJ-42))*
 2. Call `createIssueLink` to relate the new story to the ETL project story for this project:
    - `cloudId`: `CLOUD_ID`
    - `type`: `"Relates"`
@@ -263,7 +267,7 @@ After all selected stories are created, output a consolidated table:
 
 | Story Key | Check | Summary | Priority |
 |-----------|-------|---------|----------|
-| PROJ-42   | Secrets Management | Hardcoded API key in appsettings.json | High |
+| PROJ-42   | Secrets and Credentials | Hardcoded API key in appsettings.json | Highest |
 | ...       | ...   | ...     | ...      |
 
 If the user replied `none`, skip story creation and omit this table.
