@@ -12,18 +12,32 @@ Analyze the production application's SSL/TLS configuration to identify weak prot
 
 ## 1. SSL Labs Testing
 
-**Primary Tool**: Use SSL Labs Server Test to analyze production endpoints
-
-**How to Test**:
-1. Navigate to: https://www.ssllabs.com/ssltest/
-2. Enter the production URL (e.g., `https://yourdomain.com`)
-3. Check "Do not show the results on the boards" for privacy, then click "Submit"
-4. Wait for comprehensive analysis (typically 2-5 minutes)
-5. Review the detailed report
+**Primary Tool**: the SSL Labs Server Test, driven through its API v4 (API v3 was retired on 1 January 2024; the browser form is only the fallback in (c)).
 
 **Ask the user for** (once; reuse `PRODUCTION_URL` when SKILL.md already collected it):
 - Production URL(s) to test (e.g. `https://app.example.com`, `https://api.example.com`)
 - Any additional endpoints (API endpoints, admin portals, etc.)
+
+**How to Test**:
+
+**(a) SSL Labs API v4** — Enigmatry is registered for the API; send `support@enigmatry.com` in the `email` header of every call.
+```bash
+curl -s -H "email: support@enigmatry.com" "https://api.ssllabs.com/api/v4/analyze?host=<host>&publish=off&all=done"
+# add &startNew=on to the first call for a fresh assessment, then repeat the call without it every 10-30 s until "status" is "READY" (or "ERROR")
+```
+Read `endpoints[].grade` and `endpoints[].details`: `protocols` (section 2), `suites` (section 3), `cert` / `certChains` (section 4), `hstsPolicy` (section 8), `namedGroups` (X25519MLKEM768 present = post-quantum hybrid key exchange offered, section 12) and the vulnerability fields (`poodle`, `heartbleed`, `freak`, `logjam`, `drownVulnerable`, section 7).
+
+**(b) Local probes** when the API is unavailable (no registration, rate limit, host not reachable from SSL Labs):
+```bash
+openssl s_client -connect <host>:443 -tls1_1 </dev/null   # must FAIL (handshake failure)
+openssl s_client -connect <host>:443 -tls1_3 </dev/null   # must SUCCEED (Protocol: TLSv1.3)
+testssl.sh <host>                                          # full protocol, cipher and vulnerability scan
+nmap --script ssl-enum-ciphers -p 443 <host>               # protocols and cipher grades
+```
+
+**(c) Fallback**: ask the user to run https://www.ssllabs.com/ssltest/ themselves (with "Do not show the results on the boards" checked) and paste the report; rate from the pasted data and state in the report that the result was user-supplied.
+
+Source: https://github.com/ssllabs/ssllabs-scan/blob/master/ssllabs-api-docs-v4.md
 
 ## 2. SSL/TLS Protocol Versions
 
@@ -371,7 +385,7 @@ OCSP Stapling: ✅ Enabled / ❌ Disabled
 
 **Step-by-step SSL Labs audit:**
 
-1. **Obtain production URL(s) and run the SSL Labs test** as described in section 1 (one test per endpoint; all protocols, ciphers and vulnerabilities are covered)
+1. **Obtain production URL(s) and run the SSL Labs API v4 analysis** as described in section 1 (one `analyze` call per endpoint, polled until `READY`; all protocols, ciphers and vulnerabilities are covered), falling back to the local probes or a user-supplied report when the API is unavailable
 
 2. **Analyze results**
    - Overall grade
@@ -382,7 +396,7 @@ OCSP Stapling: ✅ Enabled / ❌ Disabled
    - Security features
 
 3. **Document findings**
-   - Screenshot of overall grade
+   - Grade per endpoint from `endpoints[].grade` (or the openssl / testssl.sh output when the API was unavailable)
    - List of specific issues
    - Prioritized remediation steps
    - Provide specific configuration changes needed

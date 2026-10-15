@@ -655,8 +655,8 @@ crossorigin=
    - Check Response Headers section; verify `Server` and `X-Powered-By` are absent
 
 2. **Online tools:**
-   - https://securityheaders.com
-   - https://observatory.mozilla.org
+   - MDN HTTP Observatory: https://developer.mozilla.org/en-US/observatory — successor of Mozilla Observatory (`observatory.mozilla.org` moved to MDN in July 2024; do not cite the old host). New scoring model: maximum 145 points, bonus points only count from a base score of 90 or more. Source: https://developer.mozilla.org/en-US/blog/mdn-observatory
+   - https://securityheaders.com — second tool, for a cross-check of the header grade
    - Enter your URL for automated analysis
 
 3. **Command line (curl):**

@@ -131,7 +131,7 @@ Clone it with git — no special tooling is required. Ask the user for the proje
 
 ```bicep
 // GOOD — soft delete and purge protection guard against accidental or malicious deletion
-resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
+resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' = {
   properties: {
     enableSoftDelete: true
     enablePurgeProtection: true
@@ -139,10 +139,10 @@ resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
   }
 }
 
-// RED FLAG — purge protection disabled (secrets can be permanently and immediately deleted)
+// RED FLAG — purge protection absent or disabled (soft-deleted secrets can be purged immediately)
 properties: {
   enableSoftDelete: true
-  enablePurgeProtection: false
+  enablePurgeProtection: false   // or the property is missing altogether
 }
 
 // RED FLAG — secrets hardcoded as Bicep parameters passed at deploy time
@@ -150,6 +150,8 @@ properties: {
 param mySecret string  // if wired to a Key Vault secret value, this is acceptable;
                        // if the actual secret string is passed directly, flag it
 ```
+
+Soft delete can no longer be disabled (the opt-out was removed in February 2025) and purge protection is irreversible once enabled, so `enableSoftDelete` needs no check: the only red flag is `enablePurgeProtection` absent or `false` (Medium). Use API version `2024-11-01` or later in new vault resources. Source: https://learn.microsoft.com/en-US/Azure/key-vault/general/key-vault-recovery
 
 ## 5. Credential Types to Verify
 
@@ -223,6 +225,14 @@ web.config, app.config
 # Build files
 *.csproj, *.props, Dockerfile
 ```
+
+**Run the scan:**
+```bash
+gitleaks git . --redact --report-format json --report-path gitleaks-history.json   # full git history
+gitleaks dir . --redact                                                            # working tree
+# `gitleaks detect` / `gitleaks protect` are deprecated since gitleaks 8.19
+```
+Source: https://github.com/gitleaks/gitleaks
 
 ## 8. Credential Separation per Environment
 
@@ -389,6 +399,8 @@ export const environment = {
 3. Implement separate managed identities per environment
 4. Use environment-specific resource groups and subscriptions
 
+**Prefer eliminating client secrets altogether.** Managed identity for Azure-hosted workloads, federated identity credentials for pipelines and external workloads, and certificates where neither fits remove the secret that would otherwise be committed, reused or rotated. Report `ClientSecret` usage (`AzureAd:ClientSecret`, `ClientSecretCredential`, `.WithClientSecret(`) where managed identity or federated identity is possible as Medium, and recommend a tenant app management policy that blocks `passwordAddition` and caps `passwordLifetime` so no new secrets can be added to the app registrations. Source: https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-app-management-policies
+
 **For third-party APIs:**
 1. Request separate API keys per environment from vendors
 2. Use environment-specific accounts/tenants where available
@@ -411,6 +423,10 @@ For each finding, provide:
 - **Code snippet** showing the hardcoded or exposed value (redact actual secret in report)
 - **Severity**: Critical (production credentials, encryption or signing keys, payment API keys — a secret in source, config or logs per the Severity Scale) / High (credentials for shared non-production environments such as test or acceptance, internal service tokens) / Low (real but local-only credentials, e.g. the SA password in `docker-compose.yml` for a developer database). Placeholder or example values (see the exclusions in section 1) are not findings.
 - **Recommendation**: move to a secure configuration store (Azure Key Vault, environment variables, user secrets) and rotate any exposed credentials immediately
+
+### Configuration and tooling
+
+- **Medium**: `ClientSecret` used where managed identity or federated identity is possible (section 8 remediation); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
 
 ### Credential reuse across environments
 

@@ -26,6 +26,8 @@ Before checking results, identify how SonarQube is connected to the project.
 - task: SonarCloudPrepare
 ```
 
+**Task versions:** pipelines should use `SonarQubePrepare@7` / `SonarQubeAnalyze@7` / `SonarQubePublish@7` (SonarQube Server extension; `@6` and older are deprecated) or `SonarCloudPrepare@3` / `SonarCloudAnalyze@3` / `SonarCloudPublish@3` (SonarQube Cloud extension), with `scannerMode: dotnet` for this stack. A task pinned to an older major (for example `SonarQubePrepare@5`, `SonarCloudPrepare@2`) is Low. Source: https://docs.sonarsource.com/sonarqube-server/2026.2/analyzing-source-code/ci-integration/azure-pipelines/sonarqube-tasks
+
 ```xml
 <!-- MSBuild warning configuration -->
 <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -134,7 +136,7 @@ For each security-related build warning or SonarQube security finding, provide:
 - **Rule or warning ID** (e.g. `CA2100`, `S3649`)
 - **File** and line number where available
 - **Description** of the issue
-- **Severity**: High (Blocker or Critical/High Security issue, broken crypto, injection risk) / Medium (Major or Medium Security issue; an unreviewed Security Hotspot with review priority High) / Low (Minor or Low Security issue; an unreviewed Security Hotspot with review priority Medium or Low; a suppressed security warning). Use the hotspot's own review priority, never a flat Medium
+- **Severity**: High (Blocker or Critical/High Security issue, broken crypto, injection risk) / Medium (Major or Medium Security issue; an unreviewed Security Hotspot with review priority High) / Low (Minor or Low Security issue; an unreviewed Security Hotspot with review priority Medium or Low; a suppressed security warning; a Sonar pipeline task pinned to a deprecated major). Use the hotspot's own review priority, never a flat Medium
 - **Recommendation**: remediation step or link to SonarQube rule documentation
 
 ### Technical Debt (report separately, low priority)

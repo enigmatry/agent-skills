@@ -8,6 +8,9 @@ Analyze the codebase to verify that a standard, secure authentication protocol i
 ## Core Security Principle
 **All API endpoints must require authentication by default. The application must use OpenID Connect with Authorization Code flow and PKCE. Custom authentication solutions are not acceptable; any deviation from a standard protocol is rated at least High (Critical when it allows authentication bypass).**
 
+**ASP.NET Core Identity is an acceptable framework for local accounts**, not a custom solution. .NET 10 adds built-in passkey (WebAuthn) support (`IdentityPasskeyOptions`, `AddPasskey...` on the Identity builder, Identity schema v3); passkeys are the preferred local factor, so recommend them where local accounts rely on passwords alone. Projects that call `MapIdentityApi<TUser>()` must be reviewed: `/register` is open by default and the bearer scheme issues opaque tokens that other services cannot validate. An unrestricted `/register` endpoint reachable in production = High. Search for `MapIdentityApi`, `AddPasskey`, `IdentityPasskeyOptions`.
+Source: https://learn.microsoft.com/en-us/aspnet/core/security/authentication/passkeys
+
 ## 1. Default Authorization on API Endpoints
 
 Every API endpoint must require authorization unless explicitly and intentionally opted out with `[AllowAnonymous]`.
@@ -145,15 +148,21 @@ responseType: 'id_token token'
 - `grant_type=password` — ROPC, never acceptable
 - `grant_type=implicit` — never acceptable
 
+**Standards basis:** RFC 9700 (OAuth 2.0 Security Best Current Practice, BCP 240, January 2025) states that the implicit grant MUST NOT be used to issue access tokens and that the resource owner password credentials grant MUST NOT be used. OAuth 2.1 (draft-ietf-oauth-v2-1) removes both grants and mandates PKCE, but it is still an Internet-Draft, not a standard; cite RFC 9700 in findings, not OAuth 2.1.
+Sources: https://www.rfc-editor.org/rfc/rfc9700 and https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/
+
 ## 4. Non-User Account Authentication
 
 Applications that accept requests from other applications or automated processes (service-to-service, background jobs, CI/CD pipelines) must also use a standard and secure method.
 
 **Preferred approaches:**
 ```csharp
-// BEST — Managed Identity (no credentials to manage)
-var credential = new DefaultAzureCredential();
+// BEST — Managed Identity with an explicit credential (no credentials to manage, no silent fallback)
+var credential = new ManagedIdentityCredential();          // or an explicit ChainedTokenCredential
 var token = await credential.GetTokenAsync(...);
+
+// LOCAL DEVELOPMENT ONLY — DefaultAzureCredential falls back silently to developer credentials
+var credential = new DefaultAzureCredential();
 
 // GOOD — Client Credentials flow with certificate (not secret)
 services.AddAuthentication()
@@ -162,6 +171,9 @@ services.AddAuthentication()
     .AddInMemoryTokenCaches();
 // With certificate-based client assertion, not client secret
 ```
+
+**Workload identity federation (preferred over client secrets for app-to-app and pipeline authentication):** federated identity credentials on the app registration let Azure DevOps service connections (workload identity federation) and GitHub Actions (OIDC via `azure/login`) obtain tokens without any stored secret. Check pipeline YAML and service-connection definitions for secret-based `AzureRM` connections and for `AZURE_CLIENT_SECRET` / `clientSecret` variables. `ClientSecret` used where federation or managed identity is possible = Medium.
+Source: https://devblogs.microsoft.com/devops/public-preview-of-workload-identity-federation-for-azure-pipelines
 
 **RED FLAGS:**
 ```csharp
@@ -174,12 +186,16 @@ httpClient.DefaultRequestHeaders.Add("X-Api-Key", "hardcoded-or-config-key");
 
 // BAD — Client secret instead of certificate or managed identity
 options.ClientSecret = "...";  // secrets can leak; certificates or managed identities are preferred
+
+// LOW — DefaultAzureCredential in production code (Microsoft advises against it outside local development)
+var credential = new DefaultAzureCredential();
 ```
 
 **Search for:**
 - `BasicAuthentication`, `Basic ` in authorization headers
 - Static or long-lived API keys used for service authentication
-- `ClientSecret` in OIDC or Azure AD configurations — flag if not sourced from Key Vault and recommend migration to certificate or managed identity
+- `ClientSecret` in OIDC or Azure AD configurations — flag if not sourced from Key Vault and recommend migration to workload identity federation, certificate or managed identity
+- `DefaultAzureCredential` outside local-development code paths — Low; recommend `ManagedIdentityCredential` or an explicit `ChainedTokenCredential` in production (https://learn.microsoft.com/en-us/dotnet/azure/sdk/authentication/best-practices)
 
 ## 5. Role and Claims-Based Authorization
 
@@ -272,5 +288,5 @@ The following settings cannot be verified from source code alone. Ask someone wi
 For each finding, provide:
 - **Location**: file and line number (for code findings) or environment/configuration name (for policy findings)
 - **Issue**: description of the problem
-- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow, ROPC, Swagger or OpenAPI reachable in any environment other than Development) / Medium (PKCE missing, non-user accounts using secrets instead of certificates or managed identity, policies that only `RequireAuthenticatedUser()`) / Low (token lifetime slightly above threshold, password policy deviating from NIST, Angular guard missing or mismatched)
+- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow, ROPC, Swagger or OpenAPI reachable in any environment other than Development, unrestricted Identity `/register` endpoint in production) / Medium (PKCE missing, non-user accounts using secrets where workload identity federation, certificates or managed identity are possible, policies that only `RequireAuthenticatedUser()`) / Low (token lifetime slightly above threshold, password policy deviating from NIST, Angular guard missing or mismatched, `DefaultAzureCredential` in production code)
 - **Recommendation**: the specific configuration change or policy update required

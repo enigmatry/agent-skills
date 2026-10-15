@@ -134,6 +134,14 @@ allowedContent: 'p b i strong em ul ol li a[!href]',
 disallowedContent: 'script; iframe; object; embed; *[on*]'
 ```
 
+**Server-side sanitization of stored rich text (required):**
+Editor configuration (`valid_elements`, `allowedContent`) runs in the browser and is bypassed by posting HTML directly to the API, so it never replaces a sanitizer on the server.
+- On input (.NET): sanitize with `Ganss.Xss.HtmlSanitizer` **9.0.892 or later** (CVE-2026-25543 fixed there) before persisting. Search `*.csproj` / `Directory.Packages.props` for `HtmlSanitizer` and its version; search the handlers that store the editor field for a `.Sanitize(` call.
+- At render time (Angular), when sanitizing client-side instead: DOMPurify **3.4.0 or later** (2026 CVEs such as CVE-2026-41238 and CVE-2026-41239 fixed there); check `package.json` / the lock file for `dompurify`.
+- **High**: user-supplied HTML persisted and later rendered through `bypassSecurityTrustHtml`, `nativeElement.innerHTML` or `Renderer2.setProperty(..., 'innerHTML')` without a server-side sanitizer call. A plain `[innerHTML]` binding is sanitized by Angular at render time (section 1); persisted HTML rendered only that way without a server-side sanitizer is Medium, because the server copy stays unsanitized for every other consumer.
+- **Medium**: sanitizer package below the floor version.
+Sources: https://mend.io/vulnerability-database/CVE-2026-25543 , https://security-tracker.debian.org/tracker/CVE-2026-41238
+
 ## 4. Additional Context-Specific Encoding
 
 **Check for proper encoding in different contexts:**
@@ -174,6 +182,7 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 - Direct `innerHTML` assignment with untrusted data
 - Unencoded output in JavaScript, URL, or CSS contexts
 - Rich text editors without proper whitelist configuration
+- Stored rich text rendered without a server-side sanitizer call, or a sanitizer package below the floor version (section 3)
 - Any case where user input is rendered without encoding (except properly configured rich text fields)
 
 **For each finding, provide:**
@@ -187,7 +196,9 @@ disallowedContent: 'script; iframe; object; embed; *[on*]'
 **Risk Assessment:**
 - **Critical**: Content from unauthenticated input rendered without encoding (reflected XSS reachable without login)
 - **High**: Content that originated from any user rendered without encoding, regardless of whether it is reflected or read back from the database or an API — stored XSS is High irrespective of storage location. Admin-supplied content rendered to other users is cross-user impact and is also High
+- **High**: Persisted user-supplied HTML rendered through `bypassSecurityTrustHtml` or a direct DOM write without a server-side sanitizer call; Medium when it is only ever rendered through a plain `[innerHTML]` binding (section 3)
 - **Medium**: Admin-supplied content rendered only back to the same admin, or system-originated content (configuration, internal service) rendered through a bypass without justification; admin-supplied input is never rated below Medium
+- **Medium**: `Ganss.Xss.HtmlSanitizer` below 9.0.892 or DOMPurify below 3.4.0 (section 3)
 - **Low**: Bypass applied to compile-time constant content with no documented justification
 
 ## 6. Best Practices Verification
