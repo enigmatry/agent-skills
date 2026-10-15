@@ -1,6 +1,6 @@
 ---
 name: baseline-security-audit
-description: Ensures baseline security practices are followed in the project. Use this when asked to perform a security audit on the codebase. Can create Jira stories for selected security findings.
+description: Use only when the user explicitly asks for a "Baseline Security" scan or audit of the codebase, or to create Jira stories from a Baseline Security audit. Do not use for a general security scan, vulnerability assessment, penetration test or code review that does not name Baseline Security.
 compatibility: Designed for Claude Code or similar agents. Requires an Atlassian Jira MCP server for story creation, a SonarQube MCP server for the Code Quality check, and internet access for the Security Headers, SSL/TLS and Package Security checks.
 metadata:
   author: enigmatry
@@ -126,10 +126,12 @@ Sources: https://owasp.org/Top10/2025/ , https://github.com/OWASP/ASVS/tree/v5.0
 
 ## How to Use
 
-Invoke this skill by asking for a security audit:
-- "Perform a baseline security audit"
-- "Check the codebase for security issues"
-- "Run security checks on this project"
+Invoke this skill only by naming it:
+- "Perform a Baseline Security audit"
+- "Run the Baseline Security scan on this project"
+- "Create Jira stories from the Baseline Security findings"
+
+It is not the right skill for a general security scan, a vulnerability assessment, a penetration test or a code review; those requests should not trigger it.
 
 ## Execution Flow
 
