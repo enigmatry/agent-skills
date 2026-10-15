@@ -2,6 +2,11 @@
 
 Analyze the codebase to identify missing or insufficient input validation that could lead to security vulnerabilities:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A05 Injection, A06 Insecure Design · **ASVS 5.0:** V2 Validation and Business Logic
+> **Owns:** Mass assignment / over-posting of `Id`, `OwnerId`, `TenantId`, `Role` (BOPLA); Path traversal in file access
+> **Defers to:** Caller-supplied id used in a query without an ownership or tenant check → check 8 (idor.md); Password policy → check 23 (authentication_security.md); Password hashing → check 16 (cryptography_security.md)
+
 ## Core Security Principle
 **All user input fields should be validated. Input validation must be implemented at least server-side for all input fields, and preferably also client-side for better user experience and defense-in-depth.**
 
@@ -61,9 +66,8 @@ services.AddFluentValidationAutoValidation();
 ```
 
 **Flags to raise:**
-- API endpoints accepting user input without `ModelState.IsValid` check
-- DTO/Model classes without validation attributes
-- Controllers without `[ApiController]` attribute and no manual validation
+- Actions on controllers **without** `[ApiController]` that accept user input and have no `ModelState.IsValid` check or FluentValidation auto-validation (`[ApiController]` returns 400 automatically on invalid `ModelState`; do not flag those)
+- DTO/Model classes without validation attributes, only when the type is bound from a request (see section 8 for the scope)
 - Direct binding of user input to database entities without validation
 - Missing validation for file uploads (size, type, content)
 
@@ -78,10 +82,10 @@ services.AddFluentValidationAutoValidation();
 <input type="email" required>
 <input type="url">
 
-<!-- Check for validation state handling -->
-<div *ngIf="nameControl.invalid && nameControl.touched">
-  <div *ngIf="nameControl.errors?.['required']">Name is required</div>
-</div>
+<!-- Check for validation state handling (Angular 17+ control flow; `*ngIf` is legacy, same check) -->
+@if (nameControl.invalid && nameControl.touched) {
+  @if (nameControl.errors?.['required']) { <div>Name is required</div> }
+}
 ```
 
 **Reactive forms:**
@@ -148,10 +152,11 @@ CustomValidators
 - File type validation (extension and MIME type)
 - File size limits
 - Content validation (not just extension)
-- Virus scanning
-- Filename sanitization
+- Virus scanning — not a code check: ask the user whether uploads are scanned; do not report it as a finding
+- Filename sanitization (a caller-controlled path reaching the file system is path traversal, owned here)
 
 **Passwords (NIST SP 800-63B-4, July 2025):**
+Password policy is owned by check 23 (authentication_security.md) and password hashing by check 16 (cryptography_security.md); reference those findings instead of reporting them here.
 - Minimum length 15 characters for single-factor passwords, 8 when MFA is enforced
 - Maximum length at least 64 characters (prevent DoS with a sane upper bound, e.g. 128)
 - No composition rules (NIST prohibits requiring mixed case, digits or symbols)
@@ -239,7 +244,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 
 ## 6. What to Report
 
-**Report ALL instances of (MEDIUM PRIORITY):**
+**Report ALL instances of (rate each per the Risk Assessment below):**
 - API endpoints accepting user input without validation
 - Model/DTO classes without validation attributes
 - Missing `ModelState.IsValid` checks (when not using `[ApiController]`)
@@ -247,9 +252,9 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - Numeric inputs without range validation
 - Text inputs without length constraints
 - Email/URL inputs without format validation
-- Missing client-side validation (recommended but not critical)
+- Missing client-side validation while server-side validation exists (Low)
 - Direct database entity binding without DTO layer
-- Query string/route parameters used without validation
+- Query string/route parameters used without validation (a route or query id used in a query without an ownership or tenant check is owned by check 8 (idor.md); reference that finding instead of reporting it here)
 
 **For each finding, provide:**
 - File path and line number
@@ -257,12 +262,12 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - Input field/parameter name and type
 - Expected validation rules (based on field type and context)
 - Recommended fix with validation example
-- Risk level: HIGH (no validation), MEDIUM (partial validation), LOW (client-side only)
+- Risk level: High / Medium / Low per the Risk Assessment below
 
 **Risk Assessment:**
-- **HIGH**: No server-side validation on critical inputs (authentication, authorization, financial)
-- **MEDIUM**: Missing server-side validation on general user inputs
-- **LOW**: Missing client-side validation only (server-side exists)
+- **High**: No server-side validation on an input that reaches a database, file system, external call or authorization decision
+- **Medium**: Other missing server-side validation
+- **Low**: Client-side validation missing while server-side validation exists. Client-side validation on its own never counts as validation: an input validated only in Angular is rated as missing server-side validation (High or Medium above)
 
 ## 7. Validation Best Practices
 
@@ -288,7 +293,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - Client-side validation can be bypassed
 - Security cannot rely on client controls
 - Malicious users can craft requests directly
-- Compliance and regulatory requirements
+- Compliance and regulatory requirements (not a code check: ask the user which requirements apply; do not report them as findings)
 
 **Recommended validation approach:**
 ```
@@ -302,16 +307,15 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 
 **Look for these patterns indicating potential missing validation:**
 
+Scope: only types that appear as controller action parameters, minimal-API endpoint parameters, or `[FromBody]`/`[FromForm]`/`[FromQuery]` arguments are in scope. A `*Dto`/`*Model`/`*Request`/`*Command` class, or a `public string X { get; set; }` property, on a type that is never bound from a request is **not** a finding. First collect the bound types, then inspect only those.
+
 ```regex
-// Controllers without validation
-\[HttpPost\]|\[HttpPut\]|\[HttpPatch\]
-(public.*IActionResult|public.*ActionResult|public.*Task<)
+// Step 1 — collect the request-bound types (action and endpoint parameters)
+\[Http(Post|Put|Patch)\][\s\S]{0,200}?\(\s*(\[From(Body|Form|Query)\]\s*)?(\w+)\s+\w+
+\[From(Body|Form|Query)\]\s*(\w+)\s+\w+
+Map(Post|Put|Patch)\([^,]+,\s*(async\s*)?\(\s*(\[From(Body|Form|Query)\]\s*)?(\w+)\s+\w+
 
-// Models/DTOs without attributes
-public class.*Dto|public class.*Model|public class.*Request|public class.*Command
-public.*\{.*get;.*set;.*\}
-
-// Properties without validation
+// Step 2 — within those types only: properties without validation attributes on the preceding line
 public string .* \{ get; set; \}
 public int .* \{ get; set; \}
 public decimal .* \{ get; set; \}
@@ -326,13 +330,13 @@ HttpContext.Request
 - Models/DTOs: `*Model.cs`, `*Dto.cs`, `*Request.cs`, `*Command.cs`
 - Validators: `*Validator.cs`
 - API endpoints in minimal APIs: `Program.cs`, `*Endpoints.cs`
-- Client-side forms: `*.component.ts`, `*.component.html`, `*.tsx`, `*.jsx`
+- Client-side forms: `*.component.ts`, `*.component.html`
 
 ## 9. Additional Considerations
 
 **Business Logic Validation:**
 - Check for business rule validation beyond basic format checks
-- Verify authorization rules (user can only update their own data)
+- Verify authorization rules (user can only update their own data). Owned by check 8 (idor.md); reference that finding instead of reporting it here.
 - Check for concurrent modification handling
 - Validate relationships and referential integrity
 

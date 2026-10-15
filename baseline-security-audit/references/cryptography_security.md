@@ -2,6 +2,11 @@
 
 Analyze the codebase to identify weak or insecure cryptographic implementations that could compromise data security:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A04 Cryptographic Failures · **ASVS 5.0:** V11 Cryptography
+> **Owns:** hard-coded, static or unrotated encryption key (also encountered in 21); password hashing (also encountered in 10, 23)
+> **Defers to:** encryption state of a sensitive database column → check 21 (database_field_encryption.md); code-level TLS settings (`SslProtocols`, `ServicePointManager.SecurityProtocol`, `ServerCertificateCustomValidationCallback`, `TrustServerCertificate`) → check 20 (ssl_tls_configuration.md); password policy → check 23 (authentication_security.md)
+
 ## Core Security Principle
 **Industry-standard and secure algorithms must be used for hashing and encrypting data with strong keys. Weak cryptographic algorithms can be easily broken, exposing sensitive data.**
 
@@ -37,6 +42,8 @@ MD5.Create().ComputeHash(...)           // Broken
 SHA1.Create().ComputeHash(...)          // Broken
 SHA256.Create().ComputeHash(...)        // Too fast, no salt
 ```
+
+**Severity:** MD5 or SHA-1 for passwords = Critical; unsalted or un-iterated SHA-2, or PBKDF2 below 100,000 iterations = High. Password policy (length, lockout, breached-password checks) is owned by check 23 (authentication_security.md); reference that finding instead of reporting it here.
 
 ## 2. General Data Hashing
 
@@ -78,7 +85,7 @@ using (var aes = Aes.Create())
     aes.GenerateIV();               // Random IV per encryption
 }
 ```
-Flag CBC-encrypted data that is returned to clients (cookies, tokens) without an HMAC as HIGH (padding-oracle class).
+Flag CBC-encrypted data that is returned to clients (cookies, tokens) without an HMAC as High (padding-oracle class).
 
 **RED FLAGS - Weak algorithms:**
 ```csharp
@@ -94,6 +101,8 @@ aes.IV = new byte[16];                  // BAD - Zero IV
 aes.IV = Encoding.UTF8.GetBytes("..."); // BAD - Static IV
 ```
 
+Code-level TLS settings (`SslProtocols`, `ServicePointManager.SecurityProtocol`, `ServerCertificateCustomValidationCallback`, `TrustServerCertificate`) are owned by check 20 (ssl_tls_configuration.md); reference that finding instead of reporting it here.
+
 ## 4. Random Number Generation
 
 **GOOD - Cryptographically secure:**
@@ -107,6 +116,8 @@ RandomNumberGenerator.GetInt32(1, 100); // Secure
 new Random().Next()              // BAD - Predictable
 Guid.NewGuid()                   // BAD - Not cryptographic
 ```
+
+`new Random()` or `Guid.NewGuid()` is a finding (High) only when the value is used as a secret (reset token, API key, session id, OTP); entity ids, correlation ids and file names are not findings.
 
 **Use cryptographic random for:**
 - Encryption keys, IVs, salts
@@ -137,6 +148,8 @@ services.AddDataProtection()
 aes.KeySize = 256;
 aes.GenerateKey();
 ```
+
+**Severity:** a hard-coded or static key in source or configuration (`appsettings*.json`, Bicep parameters, pipeline variables) = Critical; a key that comes from a vault or Data Protection but has no documented rotation = Low. Whether a sensitive database column is encrypted at all is owned by check 21 (database_field_encryption.md); reference that finding instead of reporting it here.
 
 ## 6. Angular Client-Side Cryptography
 
@@ -181,12 +194,18 @@ CryptoJS.PBKDF2(password, salt)          // HIGH before 4.2.0: SHA-1 with 1 iter
 
 **Steps:**
 1. Navigate to SonarQube project → "Security Hotspots"
-2. Filter by category: "Cryptography"
+2. Filter by category: `weak-cryptography`
 3. Review and remediate each hotspot
 
 ## 8. What to Report
 
-### High Priority - Password-Related Issues:
+**Severity:**
+- **Critical**: MD5/SHA-1 for passwords; DES or RC2; ECB protecting secrets or PII; hard-coded or static key; home-made cipher or hash protecting secrets
+- **High**: TripleDES; unsalted or low-iteration SHA-2 for passwords; unauthenticated CBC handed to clients; zero or static IV; `Random`/`Guid` for a secret; `CryptoJS.AES.encrypt` passphrase mode; `CryptoJS.PBKDF2` before 4.2.0
+- **Medium**: MD5/SHA-1 for non-security integrity checks; discontinued `crypto-js` dependency; unreviewed `weak-cryptography` hotspots
+- **Low**: key sizes above the minimum but below the recommendation (AES-128, RSA-2048); key without documented rotation
+
+### Password hashing findings:
 
 **Example report format:**
 ```
@@ -194,19 +213,19 @@ Finding: Weak Password Hashing Algorithm
 - Location: Services/AuthService.cs, line 45
 - Current Algorithm: SHA-256 without salt
 - Use Case: User password hashing
-- Risk Level: HIGH
+- Severity: High
 - Issue: Too fast, no salt, no iterations - vulnerable to brute-force
 - Impact: All user passwords at risk
 - Recommendation: Use ASP.NET Core Identity (PBKDF2) or BCrypt (work factor 12+)
 ```
 
-### Medium Priority - General Cryptography Issues:
+### General cryptography findings:
 
 **Report for each finding:**
 - **Location**: File path and line number
 - **Current algorithm**: MD5, SHA-1, DES, TripleDES, Random, etc.
 - **Use case**: What it's used for
-- **Risk level**: Based on data sensitivity and algorithm weakness
+- **Severity**: per the scale above (data sensitivity and algorithm weakness)
 - **Recommendation**: Specific secure alternative
 
 **Example - Weak hashing:**
@@ -215,7 +234,7 @@ Finding: Weak Hashing Algorithm (MD5)
 - Location: Services/FileService.cs, line 123
 - Current: MD5
 - Use Case: File integrity verification
-- Risk: MEDIUM - MD5 is broken (collision attacks)
+- Severity: Medium - MD5 is broken (collision attacks); non-security use
 - Recommendation: Replace with SHA-256 or SHA-512
 ```
 
@@ -225,7 +244,7 @@ Finding: Deprecated Encryption Algorithm
 - Location: Services/DataEncryptionService.cs, line 67
 - Current: TripleDES
 - Use Case: Encrypting customer PII
-- Risk: HIGH - TripleDES deprecated, known vulnerabilities
+- Severity: High - TripleDES deprecated, known vulnerabilities
 - Recommendation: Migrate to AES-256-GCM, re-encrypt existing data
 ```
 
@@ -235,7 +254,7 @@ Finding: Non-Cryptographic Random Generator
 - Location: Services/TokenService.cs, line 34
 - Current: new Random()
 - Use Case: Password reset tokens
-- Risk: HIGH - Predictable tokens, account hijacking possible
+- Severity: High - Predictable tokens, account hijacking possible
 - Recommendation: Use RandomNumberGenerator.GetBytes(32)
 ```
 
@@ -244,7 +263,7 @@ Finding: Non-Cryptographic Random Generator
 Finding: Insecure Encryption Mode (ECB)
 - Location: Utilities/EncryptionHelper.cs, line 89
 - Current: CipherMode.ECB with AES
-- Risk: HIGH - ECB reveals patterns in encrypted data
+- Severity: High - ECB reveals patterns in encrypted data
 - Recommendation: Use the `AesGcm` class with a fresh 96-bit nonce per message, or CBC with a random IV plus encrypt-then-HMAC
 ```
 
@@ -263,8 +282,8 @@ TripleDES\.Create|TripleDESCryptoServiceProvider
 RC2\.Create|RC2CryptoServiceProvider
 
 // Weak random
-new Random\(|\.Next\(|\.NextBytes
-Guid\.NewGuid
+new Random\(|\.Next\(|\.NextBytes   // flag only when the value is used as a secret
+Guid\.NewGuid                       // flag only when the value is used as a secret (reset token, API key, session id); exclude entity ids
 
 // Insecure modes
 CipherMode\.ECB

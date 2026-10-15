@@ -2,6 +2,11 @@
 
 Analyze the codebase to identify hardcoded secrets, credentials, and sensitive configuration data that could pose security risks if exposed:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A02 Security Misconfiguration · **ASVS 5.0:** V13 Configuration
+> **Owns:** Credential-bearing value in an Angular environment file (also encountered in check 12)
+> **Defers to:** Public identifiers (client id, tenant id, instrumentation key) shared across environments → check 12 (environment_credentials.md)
+
 ## Core Security Principle
 **No secrets, credentials, API keys, or sensitive configuration should be hardcoded in source code. All sensitive data must be externalized to secure configuration stores and properly protected.**
 
@@ -9,11 +14,11 @@ Analyze the codebase to identify hardcoded secrets, credentials, and sensitive c
 
 **Do not report public, non-secret identifiers as hardcoded secrets.** These values are designed to be visible (they ship in every SPA bundle and in OpenID discovery documents) and grant no access on their own:
 
-- Microsoft Entra ID / Azure AD / CIAM: `Instance`, `Authority`, `TenantId`, `ClientId` (application ID), `Audience`, `Scope` / `api://...` URIs, redirect URIs
+- Microsoft Entra ID / Azure AD / CIAM: `Instance`, `Authority`, `TenantId`, `ClientId` (application ID), `Audience`, `Scope` / `api://...` URIs, redirect URIs, certificate thumbprints
 - Other OAuth/OIDC providers: public client IDs, issuer and authority URLs
 - Application Insights connection strings and instrumentation keys, Azure resource names, subscription and tenant GUIDs
 
-Committed values like these in `appsettings*.json`, `environment.ts` or pipeline variables are **not** a Secrets Management finding. Only report them when a credential is committed alongside them — a `ClientSecret`, certificate/private key, password, or a connection string with embedded credentials — and in that case report the credential, not the identifier.
+Committed values like these in `appsettings*.json`, `environment.ts` or pipeline variables are **not** a Secrets Management finding. Only report them when a credential is committed alongside them — a `ClientSecret`, certificate/private key, password, or a connection string with embedded credentials — and in that case report the credential, not the identifier. Reuse of such an identifier across environments is a Low hygiene finding owned by check 12 (environment_credentials.md); reference that finding instead of reporting it here.
 
 ## 1. Hardcoded Secrets Detection
 
@@ -67,7 +72,7 @@ Committed values like these in `appsettings*.json`, `environment.ts` or pipeline
 // Build configuration
 *.proj, *.targets, Dockerfile, docker-compose.yml
 // CI/CD files
-*.yml (pipelines), *.json (GitHub Actions)
+*.yml (Azure Pipelines), .github/workflows/*.yml (GitHub Actions)
 ```
 
 ## 3. Source Code Secret Patterns
@@ -77,7 +82,7 @@ Committed values like these in `appsettings*.json`, `environment.ts` or pipeline
 - API keys embedded in HTTP client configurations
 - Passwords in authentication code
 - Service URLs with embedded credentials
-- Certificate thumbprints and private keys
+- Private keys and certificate files (`.pfx`/`.p12`) with their passwords
 
 **High-risk patterns to identify:**
 ```csharp
@@ -153,7 +158,7 @@ param mySecret string  // if wired to a Key Vault secret value, this is acceptab
 - Database connection strings
 - External API credentials (payment processors, email services)
 - Cloud service authentication (Azure, AWS, Google)
-- OAuth client secrets and redirect URIs
+- OAuth client secrets
 - Webhook secrets and signing keys
 
 **Common third-party services to check:**
@@ -175,10 +180,11 @@ param mySecret string  // if wired to a Key Vault secret value, this is acceptab
 **Search for:**
 ```csharp
 // Certificate and key patterns
-*.pfx, *.p12, *.pem, *.key file references
+*.pfx, *.p12, *.pem, *.key file references and committed files
 X509Certificate, RSA, HMAC implementations
-CertificateThumbprint configurations
+PFX password configuration keys (CertificatePassword, PfxPassword)
 SigningCredentials and SymmetricSecurityKey usage
+// Not a finding: CertificateThumbprint configurations (a thumbprint is a public identifier)
 ```
 
 ## 7. Version Control and Git History Analysis
@@ -206,6 +212,6 @@ For each finding, provide:
 - **File** and line number
 - **Secret type**: API key, password, connection string, certificate, etc.
 - **Code snippet** showing the hardcoded or exposed value (redact actual secret in report)
-- **Risk**: HIGH (production credentials, encryption keys, payment API keys) / MEDIUM (non-production credentials, internal service tokens) / LOW (placeholder or example values that may be real)
+- **Severity**: Critical (production credentials, encryption or signing keys, payment API keys — a secret in source, config or logs per the Severity Scale) / High (credentials for shared non-production environments such as test or acceptance, internal service tokens) / Low (real but local-only credentials, e.g. the SA password in `docker-compose.yml` for a developer database). Placeholder or example values (see the exclusions in section 1) are not findings.
 - **Recommendation**: move to a secure configuration store (Azure Key Vault, environment variables, user secrets) and rotate any exposed credentials immediately
 

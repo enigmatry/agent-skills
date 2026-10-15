@@ -91,9 +91,86 @@ This skill performs the following security checks (each with detailed guidance i
 Each check provides:
 - Specific patterns to search for
 - RED FLAGS to identify
-- Prioritized findings (High/Medium/Low)
+- Findings rated on the single severity scale below
 - Remediation guidance
 - Code examples
+
+## Severity Scale
+
+Every reference file rates findings on this one scale. Rate by **impact and exploitability**, never by who supplies the input or which environment is affected: admin-supplied input does not lower a finding below Medium, and any cross-tenant or cross-user impact is at least High.
+
+| Severity | Definition | Typical examples |
+|----------|------------|------------------|
+| **Critical** | Exploitable now, from unauthenticated or low-privilege input, with severe impact | Secret or credential in source, config or logs; injection reachable from user input; authentication bypass; CVSS 9.0+; CVV or PAN stored in clear; broken or home-made crypto protecting secrets |
+| **High** | Exploitable with authenticated input, or exposes sensitive data, or a core control is missing | Missing authorization on an endpoint; stack traces or exception details in HTTP responses; TLS 1.0/1.1 enabled; no HSTS; unauthenticated CBC data handed to clients; CVSS 7.0–8.9; PII or special-category data logged as payload; runtime past end of life |
+| **Medium** | Defense-in-depth gap or misconfiguration that needs another weakness to exploit | Missing security header; security analyzers not enabled; unreviewed SonarQube security issues; CVSS 4.0–6.9; verbose logging in production; no automated certificate renewal |
+| **Low** | Hygiene or informational; no realistic exploit path on its own | `SameSite` not explicit; HSTS `preload` absent; public identifiers shared across environments; post-quantum readiness; documentation gaps; CVSS below 4.0 |
+
+Status words such as SECURE / PARTIALLY SECURE / INSECURE, IMPLEMENTED / PARTIAL / NOT, or EXCESSIVE / MODERATE / MINIMAL are **not** severities; when a reference file uses them for an assessment, every reported finding still carries one of the four severities above.
+
+**Report every finding with:** Severity · Check number and name · Location (file:line, header, or live URL) · What was found · Remediation · OWASP Top 10:2025 category (from the mapping below).
+
+## Standards Mapping
+
+Tag each finding with the OWASP Top 10:2025 category and ASVS 5.0 chapter of its check.
+
+| # | Check | OWASP Top 10:2025 | ASVS 5.0 |
+|---|-------|-------------------|----------|
+| 1 | Secrets Management | A02 Security Misconfiguration | V13 Configuration |
+| 2 | Package Security | A03 Software Supply Chain Failures | V15 Secure Coding and Architecture |
+| 3 | SQL Injection | A05 Injection | V1 Encoding and Sanitization |
+| 4 | Exception Handling | A10 Mishandling of Exceptional Conditions | V16 Security Logging and Error Handling |
+| 5 | Logging Security | A09 Security Logging and Alerting Failures | V16 Security Logging and Error Handling |
+| 6 | Sensitive Data in Logs | A09 Security Logging and Alerting Failures | V16, V14 Data Protection |
+| 7 | Sensitive Query Strings | A04 Cryptographic Failures (data exposure) | V14 Data Protection |
+| 8 | IDOR | A01 Broken Access Control | V8 Authorization |
+| 9 | Output Encoding | A05 Injection | V1 Encoding and Sanitization, V3 Web Frontend Security |
+| 10 | Input Validation | A05 Injection, A06 Insecure Design | V2 Validation and Business Logic |
+| 11 | Code Minification | A02 Security Misconfiguration | V13 Configuration, V3 Web Frontend Security |
+| 12 | Environment Credentials | A02 Security Misconfiguration | V13 Configuration |
+| 13 | Data Minimization | A04 Cryptographic Failures, A06 Insecure Design | V14 Data Protection |
+| 14 | Data Storage Minimization | A04 Cryptographic Failures, A06 Insecure Design | V14 Data Protection |
+| 15 | Cookie and Storage Security | A02 Security Misconfiguration, A07 Authentication Failures | V7 Session Management, V3 Web Frontend Security |
+| 16 | Cryptography Security | A04 Cryptographic Failures | V11 Cryptography |
+| 17 | Security Headers | A02 Security Misconfiguration | V3 Web Frontend Security, V13 Configuration |
+| 18 | Version Info Headers | A02 Security Misconfiguration | V13 Configuration |
+| 19 | HTTP Verb Whitelisting | A02 Security Misconfiguration | V4 API and Web Service, V13 Configuration |
+| 20 | SSL/TLS Configuration | A04 Cryptographic Failures, A02 Security Misconfiguration | V12 Secure Communication |
+| 21 | Database Field Encryption | A04 Cryptographic Failures | V14 Data Protection, V11 Cryptography |
+| 22 | Code Quality | A03 Software Supply Chain Failures, A06 Insecure Design | V15 Secure Coding and Architecture |
+| 23 | Authentication Security | A07 Authentication Failures, A01 Broken Access Control | V6 Authentication, V8 Authorization, V10 OAuth and OIDC |
+
+Sources: https://owasp.org/Top10/2025/ , https://github.com/OWASP/ASVS/tree/v5.0.0
+
+## Finding Ownership
+
+Several checks look at the same code. A finding that matches a row below is reported **once**, under the owning check; the other checks only reference it ("see finding #n under check X") and never create a second finding or Jira story for it.
+
+| Finding | Owner | Also encountered in |
+|---------|-------|---------------------|
+| Caller-supplied id used in a query without an ownership or tenant check | 8 IDOR | 3, 10 |
+| Missing `[Authorize]` / no fallback authorization policy | 23 Authentication | 8 |
+| Role check present but no resource-level check (BFLA) | 8 IDOR | 23 |
+| Mass assignment / over-posting of `Id`, `OwnerId`, `TenantId`, `Role` (BOPLA) | 10 Input Validation | 8, 13 |
+| Global exception handler present and logging | 4 Exception Handling | 5 |
+| Exception details or stack traces in HTTP responses | 4 Exception Handling | 6 |
+| Secrets, tokens or PII inside log messages or destructured objects | 6 Sensitive Data in Logs | 4, 5 |
+| Log sinks, levels, console output, audit separation | 5 Logging | 6 |
+| Query-string values written to access logs or telemetry | 7 Sensitive Query Strings | 6 |
+| HSTS header | 17 Security Headers | 20 |
+| CSP, `X-XSS-Protection` and other response headers | 17 Security Headers | 9 |
+| CORS policy | 17 Security Headers | 19 |
+| Frontend models or interfaces exposing sensitive fields | 13 Data Minimization | 14 |
+| Encryption state of a sensitive database column | 21 Database Field Encryption | 14, 16 |
+| Hard-coded, static or unrotated encryption key | 16 Cryptography | 21 |
+| Public identifiers (client id, tenant id, instrumentation key) shared across environments | 12 Environment Credentials (Low, hygiene) | 1 |
+| Credential-bearing value in an Angular environment file | 1 Secrets | 12 |
+| Password hashing | 16 Cryptography | 10, 23 |
+| Password policy | 23 Authentication | 10 |
+| Code-level TLS settings (`SslProtocols`, `TrustServerCertificate`, certificate validation callbacks) | 20 SSL/TLS | 16 |
+| Source maps served publicly | 11 Code Minification | 18 |
+| Swagger or OpenAPI reachable outside Development | 23 Authentication | 18 |
+| Path traversal in file access | 10 Input Validation | 8 |
 
 ## How to Use
 
@@ -148,6 +225,18 @@ If `SELECTED_CHECKS` includes **17 (Security Headers)** or **20 (SSL/TLS Configu
 Store the answer as `PRODUCTION_URL`. If the user leaves it blank, set `PRODUCTION_URL` to empty and proceed with static analysis for both checks.
 Do **not** ask for this URL again during the audit.
 
+### Step 0b — Determine the Hosting Model (once, before running checks)
+
+Checks 11, 15, 17, 18, 19 and 20 depend on where the application runs, because `web.config` is only honoured by IIS and Azure App Service on Windows. Determine `HOSTING_MODEL` from repository evidence before running them; ask the user once only if the evidence is contradictory or absent.
+
+| `HOSTING_MODEL` | Evidence | Effect on checks |
+|-----------------|----------|------------------|
+| `iis` | `web.config` with `<aspNetCore>` or `<system.webServer>`, Bicep `Microsoft.Web/sites` without `linuxFxVersion`, pipeline deploying to IIS or Windows App Service | `web.config` sections (`customHeaders`, `requestFiltering`, `removeServerHeader`, `httpErrors`) apply |
+| `linux` | `Dockerfile`, Bicep `linuxFxVersion`, `kind: 'app,linux'`, AKS or Container Apps manifests, Kestrel exposed directly | `web.config` is ignored; the equivalents are middleware (`UseHsts`, security-header middleware, method filtering) and container or platform settings. Do not report missing `web.config` entries |
+| `edge` (modifier, combined with either) | Bicep `Microsoft.Cdn/profiles` (Front Door), `Microsoft.Network/applicationGateways`, or a reverse proxy in front of the app | Headers, TLS policy and verb filtering may be set or stripped at the edge; when `PRODUCTION_URL` is available, the live response is the ground truth, and `UseForwardedHeaders` must be configured |
+
+Store the result as `HOSTING_MODEL` and do **not** ask again.
+
 ## Jira Integration
 
 ### Step 1 — Collect the Jira Project Code (ask once, at the very start)
@@ -159,28 +248,25 @@ After confirming the selected checks, ask the user exactly once:
 Store the answer as `JIRA_PROJECT_CODE` and reuse it for all subsequent story creation calls.
 Do **not** ask again during the audit.
 
-### Step 2 — Severity Normalization
+### Step 2 — Jira Priority Mapping
 
-Reference files use two different severity scales. Normalize all findings to a single Jira priority:
+All findings already carry one of the four severities from the Severity Scale section. Map them to Jira priorities as follows (verify the priority names against the target Jira project's scheme; some schemes use `Medium` instead of `Normal`):
 
-| Finding Severity (in reference output)     | Jira Priority |
-|--------------------------------------------|---------------|
-| 🔴 Critical / Critical                     | `Highest`     |
-| 🟡 High / High / High Priority             | `High`        |
-| 🟢 Medium / Medium / Medium Priority       | `Normal`      |
-| 🔵 Low / Low / Low Priority                | `Low`         |
-
-When a reference file uses `✅ SECURE / ⚠️ PARTIALLY SECURE / ❌ INSECURE` status markers,
-map them as: `⚠️ PARTIALLY SECURE` → Normal, `❌ INSECURE` → High.
+| Severity | Jira Priority |
+|----------|---------------|
+| Critical | `Highest`     |
+| High     | `High`        |
+| Medium   | `Normal`      |
+| Low      | `Low`         |
 
 ### Step 3 — Present All Findings and Ask Which to Send to Jira
 
-After **all selected checks** are complete, output a numbered consolidated table of every finding:
+After **all selected checks** are complete, deduplicate first: any finding that matches a row of the Finding Ownership table is kept only under its owning check. Then output a numbered consolidated table of every finding:
 
-| # | Check | Finding | Priority |
-|---|-------|---------|----------|
-| 1 | Secrets Management | Hardcoded API key in appsettings.json | High |
-| 2 | ... | ... | ... |
+| # | Check | Finding | Location | Severity | OWASP 2025 |
+|---|-------|---------|----------|----------|------------|
+| 1 | 1 Secrets Management | Hardcoded API key | src/Api/appsettings.json:14 | Critical | A02 |
+| 2 | ... | ... | ... | ... | ... |
 
 Then ask the user exactly once:
 
@@ -204,7 +290,7 @@ For each finding selected by the user, create one Jira story using the `createJi
 | `projectKey`        | `JIRA_PROJECT_CODE` (collected above)                                                  |
 | `issueTypeName`     | `Story`                                                                                |
 | `summary`           | `[Security Audit] <Check Name>: <short finding title>`                                 |
-| `description`       | Finding location (file + line number), description of the issue, remediation steps (Markdown) |
+| `description`       | Finding location (file + line number), description of the issue, remediation steps, and the line `OWASP Top 10:2025: <category>` (Markdown) |
 | `additional_fields` | `{"labels": ["BaselineSecurity"], "priority": {"name": "<mapped priority>"}}` — labels and priority are only accepted through this object |
 
 **Example summary:** `[Security Audit] Secrets Management: Hardcoded API key in appsettings.json`

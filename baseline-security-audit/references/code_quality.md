@@ -2,6 +2,11 @@
 
 Review the project's build pipeline output and SonarQube dashboard to identify security-related warnings and assess the overall code quality baseline.
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A03 Software Supply Chain Failures, A06 Insecure Design · **ASVS 5.0:** V15 Secure Coding and Architecture
+> **Owns:** —
+> **Defers to:** —
+
 ## Core Security Principle
 **Security vulnerabilities and hotspots flagged by static analysis tools must be resolved before release. Build warnings related to security or known vulnerabilities are treated as security findings. Other quality issues (bugs, code coverage) are reported separately as technical debt.**
 
@@ -69,13 +74,13 @@ Do **not** accept these as evidence; they do not turn on rules that are disabled
 - `dotnet_analyzer_diagnostic.category-Security.severity = warning` or `dotnet_analyzer_diagnostic.severity = warning` (bulk severity only changes rules that are already enabled)
 - `<EnableNETAnalyzers>true</EnableNETAnalyzers>` on its own (it is already the default and only enables analyzer execution)
 
-Report "security analyzers not enabled" as a MEDIUM finding when none of the accepted settings is configured. Reference: https://learn.microsoft.com/dotnet/fundamentals/code-analysis/configuration-options
+Report "security analyzers not enabled" as a Medium finding when none of the accepted settings is configured. Reference: https://learn.microsoft.com/dotnet/fundamentals/code-analysis/configuration-options
 
 **RED FLAGS:**
-- Build warnings suppressed in bulk via `<NoWarn>` without justification, or `<NoWarn>` containing `CA2100`, `CA5xxx` or `NU1901`–`NU1904`
-- Vulnerable packages do not fail CI. Compliant when either `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` is set (it promotes `NU1903`/`NU1904` with every other warning) or `<WarningsAsErrors>` lists `NU1903;NU1904`. Red flag when neither is set, or when `TreatWarningsAsErrors=true` is combined with `<WarningsNotAsErrors>` that lists `NU1903` or `NU1904` (Microsoft's documented pattern of excluding only `NU1901;NU1902` is fine). Reference: https://learn.microsoft.com/nuget/concepts/auditing-packages
-- Vulnerability advisories present in restore output but not acted on
-- `NU1900` or `NU1905` in the restore output: the audit could not run (no vulnerability data source configured), which is itself a finding
+- Build warnings suppressed in bulk via `<NoWarn>` without justification, or `<NoWarn>` containing `CA2100`, `CA5xxx` or `NU1901`–`NU1904` (Medium)
+- Vulnerable packages do not fail CI (Medium). Compliant when either `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` is set (it promotes `NU1903`/`NU1904` with every other warning) or `<WarningsAsErrors>` lists `NU1903;NU1904`. Red flag when neither is set, or when `TreatWarningsAsErrors=true` is combined with `<WarningsNotAsErrors>` that lists `NU1903` or `NU1904` (Microsoft's documented pattern of excluding only `NU1901;NU1902` is fine). Reference: https://learn.microsoft.com/nuget/concepts/auditing-packages
+- Vulnerability advisories present in restore output but not acted on (rate by the advisory's CVSS band as in check 2, packages.md)
+- `NU1900` or `NU1905` in the restore output: the audit could not run (no vulnerability data source configured), which is itself a Medium finding
 
 ## 3. SonarQube — Security Ratings (Overall Code)
 
@@ -102,9 +107,9 @@ Use the MCP tools when available: `get_project_quality_gate_status`, `get_compon
 - Severity as reported by SonarQube
 
 **RED FLAGS:**
-- Security rating below A on Overall Code
-- Security Review rating below A (fewer than 80% of hotspots reviewed) on servers that still have hotspots
-- Quality gate without a security condition (Security rating on New Code or Overall Code), or a pipeline that does not wait for the gate (`SonarQubePublish` with `pollingTimeoutSec: 0`, no `SonarQubePublish`/`SonarCloudPublish` task at all, or Sonar tasks with `continueOnError: true`). A publish task without an explicit `pollingTimeoutSec` is compliant: it polls for 300 seconds by default
+- Security rating below A on Overall Code (rate each open Security issue per the mapping under What to Report)
+- Security Review rating below A (fewer than 80% of hotspots reviewed) on servers that still have hotspots (Medium)
+- Quality gate without a security condition (Security rating on New Code or Overall Code), or a pipeline that does not wait for the gate (Medium; `SonarQubePublish` with `pollingTimeoutSec: 0`, no `SonarQubePublish`/`SonarCloudPublish` task at all, or Sonar tasks with `continueOnError: true`). A publish task without an explicit `pollingTimeoutSec` is compliant: it polls for 300 seconds by default
 
 ## 4. SonarQube — Code Quality (Technical Debt)
 
@@ -131,7 +136,7 @@ For each security-related build warning or SonarQube security finding, provide:
 - **Rule or warning ID** (e.g. `CA2100`, `S3649`)
 - **File** and line number where available
 - **Description** of the issue
-- **Risk**: HIGH (blocker or critical vulnerability, broken crypto, injection risk) / MEDIUM (major vulnerability or unreviewed security hotspot) / LOW (minor vulnerability or suppressed security warning)
+- **Severity**: High (Blocker or Critical/High Security issue, broken crypto, injection risk) / Medium (Major or Medium Security issue; an unreviewed Security Hotspot with review priority High) / Low (Minor or Low Security issue; an unreviewed Security Hotspot with review priority Medium or Low; a suppressed security warning). Use the hotspot's own review priority, never a flat Medium
 - **Recommendation**: remediation step or link to SonarQube rule documentation
 
 ### Technical Debt (report separately, low priority)

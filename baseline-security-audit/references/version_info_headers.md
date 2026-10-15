@@ -2,6 +2,13 @@
 
 Analyze HTTP responses to identify headers that disclose platform and version information, which could aid attackers in targeting known vulnerabilities.
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A02 Security Misconfiguration · **ASVS 5.0:** V13 Configuration
+> **Owns:** —
+> **Defers to:** Source maps served publicly → check 11 (code_minification.md); Swagger or OpenAPI reachable outside Development → check 23 (authentication_security.md)
+
+> **Hosting model:** this check depends on `HOSTING_MODEL` from SKILL.md Step 0b. `web.config` sections apply only when it is `iis`; for `linux` use the middleware or platform equivalents named in this file and do not report missing `web.config` entries; with the `edge` modifier the live `PRODUCTION_URL` response is the ground truth and `UseForwardedHeaders` must be configured.
+
 ## Core Security Principle
 **Information disclosure headers like `Server` and `X-Powered-By` reveal platform details and versions that attackers can use to identify known vulnerabilities. These headers should be removed from all HTTP responses.**
 
@@ -10,8 +17,12 @@ Analyze HTTP responses to identify headers that disclose platform and version in
 **Target headers that disclose information:**
 - **Server** - Reveals web server type and version (e.g., "Microsoft-IIS/10.0")
 - **X-Powered-By** - Reveals framework and version (e.g., "ASP.NET", "ASP.NET Core 6.0")
-- **X-AspNet-Version** - Reveals specific ASP.NET version (e.g., "4.0.30319")
-- **X-AspNetMvc-Version** - Reveals ASP.NET MVC version
+- **X-AspNet-Version** - Reveals specific ASP.NET version (e.g., "4.0.30319") — legacy (.NET Framework), not expected on this stack
+- **X-AspNetMvc-Version** - Reveals ASP.NET MVC version — legacy (.NET Framework), not expected on this stack
+
+> `X-AspNet-Version`, `X-AspNetMvc-Version` and `<httpRuntime enableVersionHeader="false" />` exist only on .NET Framework. ASP.NET Core never emits these headers, so their absence (and the absence of `enableVersionHeader`) is **not** a finding on an ASP.NET Core project; only report them if the live response actually contains them.
+>
+> While fetching live headers you may also notice `.map` files served publicly or Swagger UI reachable: source maps are Owned by check 11 (code_minification.md) and Swagger/OpenAPI exposure by check 23 (authentication_security.md); reference those findings instead of reporting them here.
 
 ## 2. web.config Configuration (Both API and Front-End)
 
@@ -20,6 +31,8 @@ Analyze HTTP responses to identify headers that disclose platform and version in
 - Front-end Angular application `web.config`
 - Any `Web.config` (check capitalization variants)
 - `web.release.config` — XDT transform applied on top of `web.config` for non-development environments; always check this alongside `web.config` and apply its transforms mentally to determine the effective header values in production
+
+On `linux` hosting `web.config` is ignored: the equivalent is `AddServerHeader = false` on Kestrel (section 3) and, with the `edge` modifier, a Front Door rules-engine or Application Gateway rewrite rule that strips `Server` / `X-Powered-By` at the edge.
 
 **GOOD configuration - Remove headers:**
 ```xml
@@ -41,7 +54,7 @@ Analyze HTTP responses to identify headers that disclose platform and version in
 </configuration>
 ```
 
-**For ASP.NET applications, also add to web.config:**
+**For legacy .NET Framework applications only (not expected on this stack), also add to web.config:**
 ```xml
 <configuration>
   <system.web>
@@ -93,7 +106,9 @@ app.Run();
 }
 ```
 
-## 7. What to Report (Low Priority)
+## 4. What to Report
+
+Every finding in this check is rated **Low** (information disclosure with no exploit path on its own).
 
 **Report format:**
 ```
@@ -102,7 +117,7 @@ Finding: Version Information Disclosure via HTTP Headers
 - Location: [API/Front-end application]
 - Current Value: [Header value]
 - Issue: [What's being disclosed]
-- Risk: LOW - Information disclosure aids attackers in targeting vulnerabilities
+- Risk: Low - Information disclosure aids attackers in targeting vulnerabilities
 - Recommendation: [How to fix]
 ```
 
@@ -114,11 +129,11 @@ Finding: Server Header Discloses IIS Version
 - Location: API responses (all endpoints)
 - Current Value: Server: Microsoft-IIS/10.0
 - Issue: Server header reveals IIS version
-- Risk: LOW - Attackers can identify platform and target known IIS 10.0 vulnerabilities
+- Risk: Low - Attackers can identify platform and target known IIS 10.0 vulnerabilities
 - Recommendation: Add removeServerHeader="true" to web.config under <security><requestFiltering>
 ```
 
-## 10. Testing and Verification
+## 5. Testing and Verification
 
 ### Manual Testing:
 
@@ -155,12 +170,12 @@ Invoke-WebRequest -Uri "https://app.yourapp.com/" -Method Head |
 # Look for Server or X-Powered-By in output
 ```
 
-## 11. Best Practices
+## 6. Best Practices
 
 ✅ **Configuration:**
 - Remove `Server` header via `removeServerHeader="true"` in web.config
 - Remove `X-Powered-By` via `<remove name="X-Powered-By" />` in web.config
-- Set `enableVersionHeader="false"` for ASP.NET applications
+- Set `enableVersionHeader="false"` for legacy .NET Framework applications only
 - Configure `AddServerHeader = false` for ASP.NET Core/Kestrel
 - Apply configuration to both API and front-end web.config files
 

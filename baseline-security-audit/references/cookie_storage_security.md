@@ -2,6 +2,13 @@
 
 Analyze the codebase to identify insecure usage of cookies and local storage that could expose sensitive information:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A02 Security Misconfiguration, A07 Authentication Failures · **ASVS 5.0:** V7 Session Management, V3 Web Frontend Security
+> **Owns:** —
+> **Defers to:** —
+
+> **Hosting model:** this check depends on `HOSTING_MODEL` from SKILL.md Step 0b. `web.config` sections apply only when it is `iis`; for `linux` use the middleware or platform equivalents named in this file and do not report missing `web.config` entries; with the `edge` modifier the live `PRODUCTION_URL` response is the ground truth and `UseForwardedHeaders` must be configured.
+
 ## Core Security Principle
 **Storing sensitive information in cookies or local storage should be prevented. Cookies must be properly configured with security flags (Secure, HttpOnly, SameSite). If sensitive data storage cannot be avoided, it must be encrypted. Client-side storage is inherently less secure than server-side storage.**
 
@@ -55,7 +62,7 @@ services.Configure<CookiePolicyOptions>(options =>
 app.UseCookiePolicy(); // the options above only apply when this middleware is in the pipeline
 ```
 
-Report any `MinimumSameSitePolicy` of `Lax` or `Strict` as HIGH when the app signs in through OpenID Connect; Microsoft's policy matrix shows `None` cookies being raised to the minimum (https://learn.microsoft.com/aspnet/core/security/samesite).
+Report any `MinimumSameSitePolicy` of `Lax` or `Strict` as High when the app signs in through OpenID Connect; Microsoft's policy matrix shows `None` cookies being raised to the minimum (https://learn.microsoft.com/aspnet/core/security/samesite).
 
 **Cookies that are exceptions by design (never report these):**
 
@@ -66,7 +73,7 @@ Report any `MinimumSameSitePolicy` of `Lax` or `Strict` as HIGH when the app sig
 | Antiforgery cookie (`.AspNetCore.Antiforgery.*`) | `SameSite=Strict`, `HttpOnly` | Framework default; same-site only |
 | `XSRF-TOKEN` (Angular `withXsrfConfiguration` / `HttpClientXsrfModule`) | **not** `HttpOnly`, `Secure`, `SameSite=Lax` or `Strict` | Angular reads it from JavaScript to send the `X-XSRF-TOKEN` header |
 
-A missing `SameSite` attribute means the browser applies `Lax`; report that as LOW "attribute not explicit", not as a CSRF vulnerability.
+A missing `SameSite` attribute means the browser applies `Lax`; report that as Low "attribute not explicit", not as a CSRF vulnerability.
 
 **Required security flags:**
 - **HttpOnly = true**: Prevents JavaScript access (mitigates XSS)
@@ -141,16 +148,15 @@ Response.Cookies.Append("AuthToken", token, new CookieOptions
 **Search for sensitive data in cookie values:**
 ```csharp
 // RED FLAGS - Sensitive data in cookies
-Response.Cookies.Append("UserId", user.Id.ToString());  // Potentially sensitive
-Response.Cookies.Append("Email", user.Email);  // PII - should not be in cookie
-Response.Cookies.Append("Password", password);  // CRITICAL - Never store passwords!
-Response.Cookies.Append("Token", token);  // Ensure it's encrypted/signed
-Response.Cookies.Append("SSN", ssn);  // CRITICAL - Never store SSN in cookies!
-Response.Cookies.Append("CreditCard", cardNumber);  // CRITICAL - Never!
+Response.Cookies.Append("Email", user.Email);  // Medium - PII, should not be in a cookie
+Response.Cookies.Append("Password", password);  // Critical - never store passwords
+Response.Cookies.Append("Token", token);  // High unless HttpOnly+Secure and signed/encrypted
+Response.Cookies.Append("SSN", ssn);  // Critical - never store SSN in cookies
+Response.Cookies.Append("CreditCard", cardNumber);  // Critical - never
 
 // Questionable - Depends on sensitivity
 Response.Cookies.Append("Username", username);  // Consider necessity
-Response.Cookies.Append("Role", userRole);  // Could be tampered with
+Response.Cookies.Append("Role", userRole);  // High if trusted server-side without a signature - authorization data can be tampered with
 Response.Cookies.Append("Preferences", jsonPreferences);  // Check content
 ```
 
@@ -164,11 +170,12 @@ Response.Cookies.Append("Preferences", jsonPreferences);  // Check content
 - Unencrypted personal identifiable information (PII)
 
 **Data that requires encryption if stored in cookies:**
-- User IDs (consider signed tokens instead)
 - Email addresses
 - Session identifiers (should be random, not contain user info)
 - Any personal data
-- Authorization information
+- Authorization information (`Role`, `IsAdmin` and similar must be signed or kept server-side)
+
+A plain user id (`UserId`) in a cookie is not sensitive on its own and is not a finding; only report it when it is trusted server-side for authorization without a signature.
 
 ## 4. Angular Cookie Usage
 
@@ -222,10 +229,9 @@ Cookies.set('token', token, {
 **Flags to raise in Angular:**
 ```typescript
 // BAD - Storing sensitive data client-side
-this.cookieService.set('password', password);  // CRITICAL
-this.cookieService.set('ssn', ssn);  // CRITICAL
-this.cookieService.set('email', email);  // Should avoid
-this.cookieService.set('userId', userId);  // Consider alternatives
+this.cookieService.set('password', password);  // Critical
+this.cookieService.set('ssn', ssn);  // Critical
+this.cookieService.set('email', email);  // Medium - PII, avoid
 
 // BAD - Missing secure flag
 this.cookieService.set('preferences', prefs);  // Missing secure: true
@@ -268,29 +274,37 @@ this.storage.get('key').subscribe();
 
 **Check what data is stored in local/session storage:**
 
-**CRITICAL - Data that should NEVER be in local storage:**
+**Critical - Data that should NEVER be in local storage:**
 ```typescript
-// CRITICAL VIOLATIONS
+// Critical violations
 localStorage.setItem('password', password);  // Never store passwords!
 localStorage.setItem('ssn', user.ssn);  // Never store SSN!
 localStorage.setItem('creditCard', cardNumber);  // Never!
-localStorage.setItem('token', authToken);  // Vulnerable to XSS - use HttpOnly cookies
-localStorage.setItem('sessionId', sessionId);  // Use HttpOnly cookies instead
-localStorage.setItem('apiKey', apiKey);  // Should be server-side only
 localStorage.setItem('privateKey', privateKey);  // Never client-side!
 ```
 
-**MEDIUM PRIORITY - Sensitive data requiring encryption:**
+**High - Home-grown credentials in localStorage:**
+```typescript
+localStorage.setItem('token', authToken);  // Home-grown JWT/bearer storage - XSS-readable, cannot be invalidated
+localStorage.setItem('sessionId', sessionId);  // Use HttpOnly cookies instead
+localStorage.setItem('apiKey', apiKey);  // Should be server-side only
+```
+
+**Token caches of the standard OIDC libraries are rated by cache location, not as home-grown storage:**
+- MSAL (`@azure/msal-angular`, `cacheLocation`) or `oidc-client-ts` / `angular-auth-oidc-client` using `sessionStorage` → Low (library default, tab-scoped; note it, recommend keeping the default)
+- The same libraries configured for `localStorage` → Medium (persists across tabs and restarts; recommend `sessionStorage`)
+- Any home-grown `localStorage.setItem('token', ...)` of a JWT or bearer token → High
+
+**Medium - Sensitive data requiring encryption:**
 ```typescript
 // Should be encrypted if storage is necessary
 localStorage.setItem('email', user.email);  // PII - encrypt or avoid
 localStorage.setItem('phoneNumber', user.phone);  // PII - encrypt or avoid
 localStorage.setItem('address', user.address);  // PII - encrypt or avoid
-localStorage.setItem('userId', user.id);  // Could be encrypted
 localStorage.setItem('personalData', JSON.stringify(user));  // Encrypt!
 ```
 
-**LOW PRIORITY - Non-sensitive data (acceptable):**
+**Not a finding - Non-sensitive data (acceptable):**
 ```typescript
 // Generally safe to store unencrypted
 localStorage.setItem('theme', 'dark');  // User preference
@@ -309,8 +323,8 @@ localStorage.setItem('settings', JSON.stringify(settings));  // UI settings
 // RED FLAG - crypto-js is discontinued ("no longer maintained" per its README) and
 // CVE-2023-46233 made its PBKDF2 default to SHA-1 with 1 iteration before 4.2.0.
 // Passphrase-based CryptoJS.AES.encrypt(data, 'passphrase') derives key and IV with MD5.
-import * as CryptoJS from 'crypto-js';          // MEDIUM: unmaintained dependency
-CryptoJS.AES.encrypt(data, passphrase)           // HIGH: weak key derivation
+import * as CryptoJS from 'crypto-js';          // Medium: unmaintained dependency
+CryptoJS.AES.encrypt(data, passphrase)           // High: weak key derivation
 
 // ACCEPTABLE - Web Crypto API (built into every supported browser)
 const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['encrypt', 'decrypt']);
@@ -346,9 +360,16 @@ const derived = await crypto.subtle.deriveKey(
 
 ## 8. What to Report
 
-### Low Priority - Unsafe Cookie Configuration:
+### Unsafe Cookie Configuration:
 
-**Report cookies missing security flags:**
+**Report cookies missing security flags.** Severity depends on the cookie's purpose:
+
+| Cookie | Missing `Secure` or `HttpOnly` | `SameSite` not explicit |
+|--------|-------------------------------|-------------------------|
+| Authentication, session or antiforgery cookie | High | Low |
+| OIDC correlation / nonce cookie (`SameSite=None; Secure` required) | High if `Secure` is missing | not a finding (`None` is by design) |
+| `XSRF-TOKEN` (must be JavaScript-readable) | High if `Secure` is missing; `HttpOnly` absence is by design | Low |
+| Preference or UI cookie | Low | Low |
 
 For each finding, provide:
 - **Location**: File path and line number
@@ -368,11 +389,21 @@ Finding: Cookie Missing HttpOnly Flag
 - Cookie Name: "UserPreferences"
 - Missing Flag: HttpOnly = true
 - Purpose: Storing user UI preferences
-- Risk: LOW - Cookie accessible to JavaScript (XSS risk)
+- Risk: Low - Cookie accessible to JavaScript (XSS risk)
 - Recommendation: Add HttpOnly = true to CookieOptions
 ```
 
-### Medium Priority - Unencrypted Sensitive Data:
+```
+Finding: Authentication Cookie Missing Secure Flag
+- Location: Program.cs, line 61 (AddCookie options)
+- Cookie Name: ".AspNetCore.Cookies"
+- Missing Flag: SecurePolicy = CookieSecurePolicy.Always
+- Purpose: Authentication session
+- Risk: High - Session cookie can be sent over plain HTTP and captured in transit
+- Recommendation: Set options.Cookie.SecurePolicy = CookieSecurePolicy.Always (and configure UseForwardedHeaders behind Front Door / Application Gateway)
+```
+
+### Unencrypted Sensitive Data:
 
 **Report sensitive data in cookies or local storage:**
 
@@ -380,10 +411,11 @@ For each finding, provide:
 - **Location**: File path and line number
 - **Storage type**: Cookie, localStorage, or sessionStorage
 - **Data type**: What sensitive information is stored
-- **Data sensitivity**:
-  - **CRITICAL**: Passwords, SSN, credit cards, auth tokens
-  - **HIGH**: Email, phone, address, user IDs
-  - **MEDIUM**: Personal preferences with PII
+- **Data sensitivity** (this is the finding's severity):
+  - **Critical**: Passwords, SSN / national id, card numbers (PAN / CVV), private keys
+  - **High**: Home-grown JWT or bearer token in localStorage, session id, API key, authorization data (`Role`, `IsAdmin`) trusted without a signature
+  - **Medium**: Email, phone, address and other PII in plaintext; OIDC library token cache configured for `localStorage`
+  - **Low**: OIDC library token cache in `sessionStorage` (library default)
 - **Encryption status**: Encrypted or plaintext
 - **Usage**: How the data is used in the application
 - **Risk level**: Impact if data is compromised
@@ -399,10 +431,10 @@ Finding: Unencrypted Email Address in Local Storage
 - Location: services/user.service.ts, line 67
 - Storage Type: localStorage
 - Data Type: Email address (PII)
-- Sensitivity: HIGH
+- Sensitivity: Medium
 - Encryption: None (plaintext)
 - Usage: Displayed in user profile header
-- Risk: MEDIUM - Email exposed to XSS attacks, browser extensions
+- Risk: Medium - Email exposed to XSS attacks, browser extensions
 - Recommendation: 
   1. PRIMARY: Fetch email from server when needed (don't store)
   2. ALTERNATIVE: Encrypt with the Web Crypto API (AES-GCM) before storing; never crypto-js
@@ -413,18 +445,18 @@ Finding: Unencrypted Email Address in Local Storage
 Finding: Authentication Token in Local Storage
 - Location: services/auth.service.ts, line 34
 - Storage Type: localStorage
-- Data Type: JWT authentication token
-- Sensitivity: CRITICAL
+- Data Type: JWT authentication token (home-grown storage, not an OIDC library cache)
+- Sensitivity: High
 - Encryption: None (plaintext JWT)
 - Usage: Sent with API requests for authentication
-- Risk: HIGH - Token accessible to XSS, cannot be invalidated client-side
+- Risk: High - Token accessible to XSS, cannot be invalidated client-side
 - Recommendation: 
   1. REQUIRED: Move to HttpOnly cookie set by server
   2. Update API to accept cookie-based authentication
   3. Remove localStorage.setItem('token', ...) completely
 ```
 
-## 10. SameSite Attribute Details
+## 9. SameSite Attribute Details
 
 **Understand SameSite modes:**
 
@@ -455,7 +487,7 @@ SameSite = SameSiteMode.None, Secure = true
 - **Third-party contexts (iframes)**: Use `None` with `Secure = true` and add the CHIPS `Partitioned` attribute via `options.Extensions.Add("Partitioned")`
 - **Default**: `Lax` is the right default for most cookies
 
-## 11. Best Practices Verification
+## 10. Best Practices Verification
 
 **Verify that the application follows these practices:**
 
@@ -488,27 +520,23 @@ SameSite = SameSiteMode.None, Secure = true
 - Encryption utilities if client-side storage is required
 - Clear documentation of what's stored and why
 
-## 13. Testing and Verification
+## 11. Testing and Verification
 
-**Manual verification steps:**
+**Verification steps:**
 
-1. **Check browser DevTools:**
-   - Open Application/Storage tab
-   - Inspect Cookies - verify Secure, HttpOnly, SameSite flags
-   - Inspect Local Storage - check for sensitive data
-   - Inspect Session Storage - check for sensitive data
+1. **`Set-Cookie` header diff from the live URL** (when `PRODUCTION_URL` is available; this is the ground truth with the `edge` modifier):
+   ```bash
+   curl -sSI -L "$PRODUCTION_URL" | grep -i '^set-cookie'
+   curl -sSI -L "$PRODUCTION_URL/api/health" | grep -i '^set-cookie'
+   ```
+   (PowerShell 7: `(Invoke-WebRequest -Uri $env:PRODUCTION_URL -Method Head -SkipHttpErrorCheck).Headers['Set-Cookie']`.) For every `Set-Cookie` line, diff the attributes present (`Secure`, `HttpOnly`, `SameSite`, `Path`, `Max-Age`/`Expires`, `Partitioned`) against the required settings in the section 1 table; report each gap with the severity from section 8. A cookie seen without `Secure` while the code sets `CookieSecurePolicy.Always` means `UseForwardedHeaders` is missing behind the edge.
 
-2. **Test cookie flags:**
-   - Verify cookies are only sent over HTTPS (Secure flag)
-   - Try to access HttpOnly cookies via JavaScript (should fail)
-   - Test CSRF protection with SameSite settings
+2. **DevTools Application tab checklist** (ask the user to open the app, sign in, and read the panel; nothing is executed in the page):
+   - Cookies → per cookie, the `Secure`, `HttpOnly`, `SameSite` and `Partitioned` columns match the section 1 table
+   - Local Storage → no key holding a JWT (`eyJ...`), bearer token, password, email or other PII; MSAL / oidc-client cache keys appear here only if `cacheLocation` was changed to `localStorage` (Medium)
+   - Session Storage → OIDC library cache keys are expected here (Low, note only); no home-grown token keys
+   - Note every key name and the first characters of its value in the finding; never copy a full token into the report
 
-3. **Test XSS scenarios:**
-   - Attempt to steal localStorage data via JavaScript
-   - Verify sensitive data isn't accessible to malicious scripts
-   - Test that HttpOnly cookies aren't accessible
-
-4. **Review network traffic:**
-   - Ensure cookies are sent with requests
-   - Verify sensitive data isn't exposed in URLs
-   - Check that tokens are in headers/cookies, not query strings
+3. **Network tab review** (or the `curl` output above):
+   - Cookies are sent only over HTTPS requests
+   - Tokens travel in the `Authorization` header or a cookie, never in the query string (query-string tokens are Owned by check 7 (sensitive_query_strings.md); reference that finding instead of reporting it here)

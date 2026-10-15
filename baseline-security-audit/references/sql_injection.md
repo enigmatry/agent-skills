@@ -2,6 +2,11 @@
 
 Scan the codebase for SQL injection vulnerabilities where user input is incorporated into SQL queries without proper parameterization or escaping.
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A05 Injection · **ASVS 5.0:** V1 Encoding and Sanitization
+> **Owns:** —
+> **Defers to:** Caller-supplied id used in a query without an ownership or tenant check → check 8 (idor.md)
+
 ## Core Security Principle
 **All database queries must use parameterized queries or prepared statements. User input must never be concatenated or interpolated directly into SQL strings.**
 
@@ -36,7 +41,7 @@ Check for unsafe stored procedure invocation:
 Check for unsafe raw queries within ORMs:
 - Raw SQL passed to Entity Framework methods
 - Dynamic LINQ expressions built from user-supplied strings
-- Unsafe `Where()` clauses with string operations
+- `System.Linq.Dynamic.Core` string predicates built from user-supplied strings (e.g. `.Where("Name == \"" + input + "\"")`, `.OrderBy(sortExpression)`) and raw SQL inside `Where` (e.g. `EF.Functions.*` fed a concatenated string). Plain LINQ `Contains`/`StartsWith`/`EndsWith` on an `IQueryable` are parameterized by EF Core and are not findings
 - HQL or native SQL queries (if applicable)
 
 ## 5. Input Sources to Validate
@@ -44,12 +49,16 @@ Check for unsafe raw queries within ORMs:
 Identify all user-controlled input flowing into queries:
 - Form fields, API request bodies, and query string parameters
 - URL route parameters used in queries
+  - A caller-supplied id used in a query without an ownership or tenant check is a different finding: owned by check 8 (idor.md); reference that finding instead of reporting it here.
 - File-upload metadata that feeds into SQL
 - Configuration values that might be tampered with
 
 ## 6. Common Patterns to Flag
 
-- Any SQL keyword (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) followed by string operations
+- A raw-SQL entry point whose argument is built from string operations:
+  ```regex
+  (FromSqlRaw|ExecuteSqlRaw|ExecuteSqlRawAsync|SqlQueryRaw|CommandText\s*=|\.Query(Async|First|Single)?\(|\.Execute(Async)?\()\s*\(?\s*(\$"|"[^"]*"\s*\+|string\.(Format|Concat)|\w+Builder\.ToString\(\))
+  ```
 - `WHERE` clauses built dynamically at runtime
 - `ORDER BY` with a dynamic column name from user input
 - Table or column names sourced from user input
@@ -62,11 +71,30 @@ Identify all user-controlled input flowing into queries:
 - Look for bypasses of built-in ORM query protections
 - Examine custom SQL builders or query helper utilities
 
+**Files to examine:**
+- `**/*.cs` (repositories, `*DbContext*.cs`, `*Repository*.cs`, `*Query*.cs`, `*Handler*.cs`, Dapper helpers)
+- `**/*.sql` and `**/Migrations/**/*.cs` only for dynamic SQL inside stored procedures (`EXEC(`, `sp_executesql` with concatenated input)
+
+**Search patterns:**
+```regex
+FromSqlRaw|ExecuteSqlRaw(Async)?|SqlQueryRaw
+CommandText\s*=
+new SqlCommand\(\s*(\$"|"[^"]*"\s*\+|\w+\s*\+)
+\.(Query|QueryFirst|QuerySingle|Execute)(Async)?(<[^>]+>)?\(\s*(\$"|"[^"]*"\s*\+|string\.(Format|Concat))
+string\.(Format|Concat)\([^)]*\b(SELECT|INSERT|UPDATE|DELETE|WHERE|ORDER BY)\b
+\$"[^"]*\b(SELECT|INSERT|UPDATE|DELETE|WHERE|ORDER BY)\b[^"]*\{
+\b(SELECT|INSERT|UPDATE|DELETE|WHERE|ORDER BY)\b[^"]*"\s*\+\s*\w+
+StringBuilder[\s\S]{0,200}\b(SELECT|INSERT|UPDATE|DELETE|WHERE|ORDER BY)\b
+FormattableStringFactory\.Create|FromSqlInterpolated\(\$"\{\w+\}"\)
+CommandType\.StoredProcedure[\s\S]{0,120}\+
+System\.Linq\.Dynamic|\.Where\(\s*\$?"|\.OrderBy\(\s*\$?"
+```
+
 ## What to Report
 
 For each finding, provide:
 - **File** and line number
 - **Code snippet** showing the vulnerable query construction
 - **Input source**: where the user-controlled value originates
-- **Risk**: HIGH (direct user input in query) / MEDIUM (indirect or partially controlled input) / LOW (admin-only or configuration-controlled input)
+- **Risk**: Critical (unauthenticated user input reaches the query) / High (authenticated user input reaches the query) / Medium (indirect, partially controlled or admin-supplied input; admin-supplied input is never rated below Medium) / Low (only compile-time constants or allow-listed values reach the query)
 - **Recommendation** with a secure parameterized alternative

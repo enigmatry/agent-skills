@@ -2,8 +2,13 @@
 
 Analyze the codebase to identify unnecessary storage of sensitive or personal data that violates the principle of data minimization:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A04 Cryptographic Failures, A06 Insecure Design · **ASVS 5.0:** V14 Data Protection
+> **Owns:** —
+> **Defers to:** frontend models or interfaces exposing sensitive fields → check 13 (data_minimization.md); encryption state of a sensitive database column → check 21 (database_field_encryption.md)
+
 ## Core Security Principle
-**Only data which is strictly required for the application should be stored. Storing unnecessary sensitive or personal data increases privacy risks, regulatory compliance burden, and potential breach impact. This principle is fundamental to GDPR, CCPA, and other privacy regulations.**
+**Only data which is strictly required for the application should be stored. Storing unnecessary sensitive or personal data increases privacy risks, regulatory compliance burden, and potential breach impact. This is GDPR art. 5(1)(c) (data minimisation); art. 9 special categories need an explicit legal basis and, where processing is likely high-risk, a DPIA (art. 35); UAVG art. 46 permits the BSN only with a statutory basis.**
 
 ## 1. Database Schema Analysis
 
@@ -41,6 +46,8 @@ public string TaxId { get; set; }
 public string PassportNumber { get; set; }
 public string DriverLicenseNumber { get; set; }
 public string NationalId { get; set; }
+public string Bsn { get; set; }                    // BurgerServiceNummer (NL) — UAVG art. 46: only with a statutory basis
+public string BurgerServiceNummer { get; set; }
 public byte[] FingerprintData { get; set; }
 public byte[] BiometricData { get; set; }
 
@@ -100,7 +107,7 @@ public string GPSCoordinates { get; set; }
 public string BrowsingHistory { get; set; }
 public string SearchHistory { get; set; }
 public string PurchaseHistory { get; set; }
-public DateTime LastLoginLocation { get; set; }
+public string LastLoginLocation { get; set; }
 ```
 
 ## 3. Questions to Ask for Each Sensitive Field
@@ -203,7 +210,7 @@ public DateTime EmploymentEndDate1 { get; set; }
 // If it's not a recruiting/HR application, probably not
 ```
 
-## 6. Database Migration Analysis
+## 5. Database Migration Analysis
 
 **Check Entity Framework migrations for sensitive columns:**
 
@@ -228,10 +235,10 @@ migrationBuilder.AddColumn<string>(
 // QUESTIONS:
 // - Why was DateOfBirth added? What feature requires it?
 // - Why is SSN stored? Is this legally required?
-// - Are these fields encrypted at rest?
+// - Are these fields encrypted at rest? (encryption state is owned by check 21, database_field_encryption.md)
 ```
 
-## 7. DbContext and Configuration Analysis
+## 6. DbContext and Configuration Analysis
 
 **Check DbContext configurations:**
 
@@ -259,20 +266,21 @@ public class ApplicationDbContext : DbContext
 }
 ```
 
-## 8. What to Report
+## 7. What to Report
 
-**Report ALL instances of unnecessary sensitive data storage (MEDIUM PRIORITY):**
+**Report every instance of unnecessary sensitive data storage:**
 
 **For each finding, provide:**
 
 1. **Entity/Table name** - Where the data is stored
 2. **Field/Property name** - The specific sensitive field
 3. **Data type** - What kind of sensitive information
-4. **Sensitivity level:**
-   - **CRITICAL**: SSN, credit cards, biometric data, medical records
-   - **HIGH**: Full date of birth, financial data, precise location
-   - **MEDIUM**: Gender, ethnicity, full address, phone numbers
-   - **LOW**: Age ranges, general location (city/country)
+4. **Severity** (data class × justification; the single rating used throughout this check):
+   - **Critical**: BSN/SSN, PAN, CVV or health data stored without a legal basis or business need
+   - **High**: other special-category data (GDPR art. 9: race, ethnicity, religion, sexual orientation, biometric) or financial data (bank account, IBAN, salary, credit score) stored without need
+   - **Medium**: ordinary PII (date of birth, full address, phone numbers, gender, marital status, precise location) stored without need
+   - **Low**: non-sensitive data stored without need (age range, city/country, preferences)
+   A field assessed JUSTIFIED below is not a finding; QUESTIONABLE or POTENTIALLY JUSTIFIED fields are rated one level lower than NOT JUSTIFIED.
 
 5. **Business justification assessment:**
    - **NOT JUSTIFIED**: No clear business need identified
@@ -292,7 +300,7 @@ public class ApplicationDbContext : DbContext
    - **REPLACE**: Use less sensitive alternative (e.g., age range instead of DOB)
    - **DERIVE**: Calculate on-demand instead of storing
    - **JUSTIFY**: Document why this data is necessary
-   - **ENCRYPT**: If data must be stored, ensure proper encryption
+   - **ENCRYPT**: If data must be stored, ensure proper encryption — the encryption state of the column is owned by check 21 (database_field_encryption.md); reference that finding instead of reporting it here
    - **ANONYMIZE**: Store in anonymized form when possible
 
 **Example report format:**
@@ -300,7 +308,7 @@ public class ApplicationDbContext : DbContext
 Finding: Unnecessary Storage of Date of Birth
 - Entity: User (Users table)
 - Field: DateOfBirth (DateTime)
-- Sensitivity Level: HIGH
+- Severity: Medium
 - Business Justification: NOT JUSTIFIED
 - Usage Analysis: 
   * Field is set during registration
@@ -318,7 +326,7 @@ Finding: Unnecessary Storage of Date of Birth
   * Create migration to drop column
 ```
 
-## 10. Best Practices Verification
+## 8. Best Practices Verification
 
 **Verify that the application follows these practices:**
 
@@ -341,9 +349,10 @@ Finding: Unnecessary Storage of Date of Birth
 - Use tokens/references instead of actual data
 
 ✅ **Regulatory compliance:**
-- GDPR Article 5(1)(c) - Data minimization
-- CCPA requirements for data collection
-- HIPAA for medical data (if applicable)
+- GDPR art. 5(1)(c) - data minimisation
+- GDPR art. 9 - special categories need an explicit legal basis; a DPIA (art. 35) where processing is likely high-risk
+- GDPR art. 8 - age of consent for information-society services (16 in the Netherlands)
+- UAVG art. 46 - BSN only with a statutory basis
 - PCI DSS for payment data (should not be stored directly)
 
 ✅ **Documentation:**
@@ -352,13 +361,16 @@ Finding: Unnecessary Storage of Date of Birth
 - Retention policies for each data type
 - Legal basis for processing personal data
 
-## 11. Usage Verification Steps
+## 9. Usage Verification Steps
 
 **For each potentially unnecessary field, verify usage:**
 
 1. **Search for property access:**
-   ```
-   Search: "user.DateOfBirth", ".DateOfBirth", "DateOfBirth ="
+   ```regex
+   \bDateOfBirth\b                                   // every reference to the property
+   \.DateOfBirth\b|\bDateOfBirth\s*=                 // reads and assignments
+   \b(Bsn|BurgerServiceNummer|SocialSecurityNumber|NationalId)\b
+   \b(Gender|Religion|Ethnicity|Race|SexualOrientation)\b
    ```
 
 2. **Check controller/API usage:**
@@ -386,15 +398,15 @@ Finding: Unnecessary Storage of Date of Birth
    - Check if it was planned for future features
    - Consider technical debt cleanup
 
-## 12. Special Considerations
+## 10. Special Considerations
 
 **Data that should NEVER be stored (unless specific legal requirement):**
 - Full credit card numbers (use tokenization)
 - Plain-text passwords (use hashing)
-- Social Security Numbers (unless legally required, e.g., payroll)
+- BSN / Social Security Numbers (UAVG art. 46: only with a statutory basis, e.g. payroll)
 - Medical diagnoses (unless healthcare application)
 - Biometric data (unless specifically needed)
-- Children's data (additional COPPA compliance)
+- Children's data (GDPR art. 8: parental consent below the age of 16 in the Netherlands)
 - Religion, political affiliation (discrimination risk)
 - Race, ethnicity (only if legally required for reporting)
 
@@ -413,59 +425,10 @@ Finding: Unnecessary Storage of Date of Birth
 - Order history (required for business operations)
 - Billing information (when using payment processor tokens)
 
-## 13. Remediation Priority
+## 11. Remediation Priority
 
-**Prioritize remediation based on:**
+Remediate in the order of the severity assigned in section 7 (data class × justification); there is no separate priority scale. Within one severity, remove unused fields first (no functional cost), then REPLACE or DERIVE fields that have a less sensitive alternative (age range instead of date of birth, city/postal code instead of a full address), then JUSTIFY and document the remaining fields. Unencrypted sensitive columns are owned by check 21 (database_field_encryption.md); reference that finding instead of reporting it here.
 
-1. **CRITICAL (Immediate action):**
-   - Sensitive data stored without clear legal/business need
-   - Unencrypted sensitive data (SSN, financial, medical)
-   - Data that violates regulations (GDPR, CCPA, HIPAA)
-   - Data that poses discrimination risk (religion, race without justification)
+## 12. Angular Considerations
 
-2. **HIGH (Short-term):**
-   - Excessive personal data without strong justification
-   - Full date of birth when age range suffices
-   - Detailed addresses when city/postal code suffices
-   - Unused fields that contain sensitive data
-
-3. **MEDIUM (Medium-term):**
-   - Demographic data with weak business justification
-   - Redundant contact information
-   - Historical data that could be archived/deleted
-   - Optional fields that could be removed
-
-4. **LOW (Long-term):**
-   - Fields with questionable value
-   - Data that could be derived instead of stored
-   - Optimization opportunities for data storage
-
-## 14. Angular Considerations
-
-**While Angular is the front-end framework, check:**
-
-**TypeScript models/interfaces:**
-- `*.model.ts`, `*.interface.ts` files
-- DTOs that mirror backend entities
-- Forms that collect sensitive data
-
-**Verify forms don't request unnecessary data:**
-```typescript
-// registration.component.ts or user-form.component.ts
-export interface RegistrationForm {
-  email: string;
-  password: string;
-  dateOfBirth: Date;        // Is this needed?
-  ssn: string;              // Should NOT be requested!
-  phoneNumber: string;      // Required or optional?
-  gender: string;           // Necessary for application?
-  address: string;          // Needed or can use city/postal?
-}
-```
-
-**Check that UI doesn't display unnecessary sensitive data:**
-- User profile pages showing too much information
-- Admin panels displaying sensitive fields
-- Forms collecting more data than needed
-
-**Note:** The primary check is backend entity definitions, but Angular forms indicate what data is being collected from users.
+Frontend models, interfaces and forms that expose or collect sensitive fields are owned by check 13 (data_minimization.md); reference that finding instead of reporting it here. Use Angular forms only as evidence of which backend entity fields are populated (a `bsn` or `dateOfBirth` form control points at the entity field to assess under sections 2–3).

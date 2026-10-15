@@ -2,8 +2,15 @@
 
 Analyze the codebase to identify credential reuse across different environments (development, test, acceptance, production) that could lead to security breaches and environment contamination:
 
+> **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
+> **OWASP Top 10:2025:** A02 Security Misconfiguration · **ASVS 5.0:** V13 Configuration
+> **Owns:** Public identifiers (client id, tenant id, instrumentation key) shared across environments — Low, hygiene (also encountered in check 1)
+> **Defers to:** Credential-bearing value in an Angular environment file → check 1 (secrets.md)
+
 ## Core Security Principle
 **Each environment (development, test, acceptance, production) MUST use different credentials for accessing resources like databases, APIs, storage accounts, and third-party services. Credential reuse across environments increases the blast radius of security incidents and can lead to accidental data corruption or exposure.**
+
+**Public identifiers are never a credential finding.** `ClientId`, `TenantId`, `Authority`, Application Insights instrumentation keys and connection strings, analytics IDs, Google Maps browser keys, reCAPTCHA site keys and Stripe publishable keys grant no access on their own. When one of them is reused across environments, report it once as a **Low** hygiene finding (separate app registrations and telemetry resources per environment are good practice), never as credential reuse. Any secret-bearing value (password, client secret, account key, API secret, connection string with embedded credentials) found in an Angular environment file is owned by check 1 (secrets.md) and is reported there; this check only compares public keys and identifiers in those files for reuse.
 
 ## 1. ASP.NET Core Configuration Files
 
@@ -34,9 +41,9 @@ Analyze the codebase to identify credential reuse across different environments 
 ```json
 {
   "AzureAd": {
-    "ClientId": "...",        // Application/Client ID
-    "ClientSecret": "...",    // Client secret
-    "TenantId": "..."         // Tenant ID
+    "ClientId": "...",        // Application/Client ID — public identifier, Low if reused
+    "ClientSecret": "...",    // Client secret — credential
+    "TenantId": "..."         // Tenant ID — public identifier, may legitimately be the same
   },
   "Storage": {
     "AccountName": "...",     // Storage account name
@@ -49,8 +56,8 @@ Analyze the codebase to identify credential reuse across different environments 
   },
   "KeyVault": {
     "VaultUri": "...",
-    "ClientId": "...",
-    "ClientSecret": "..."
+    "ClientId": "...",        // public identifier, Low if reused
+    "ClientSecret": "..."     // credential
   }
 }
 ```
@@ -88,27 +95,26 @@ Analyze the codebase to identify credential reuse across different environments 
 **Angular-specific configuration:**
 
 **Files to examine:**
-- `src/environments/environment.ts` - Development (default)
-- `src/environments/environment.prod.ts` - Production
-- `src/environments/environment.test.ts` - Test
-- `src/environments/environment.staging.ts` - Staging
-- Any custom environment files
+- `src/environments/environment.ts` - Production (the default build target since Angular 15)
+- `src/environments/environment.development.ts` - Development override
+- `src/environments/environment.<env>.ts` - Test, staging or any other override
+- Derive the actual mapping from `angular.json`: `projects.<name>.architect.build.configurations.<config>.fileReplacements` names the file that replaces `environment.ts` for each configuration; older projects may still use `environment.prod.ts` as the production override
 
 **Compare configuration values:**
 ```typescript
 export const environment = {
   production: false,
   apiUrl: 'https://api.dev.example.com',
-  apiKey: 'dev_api_key_...',  // Should differ per environment
+  apiKey: 'dev_api_key_...',  // Secret-bearing value: owned by check 1 (secrets.md); reference that finding instead of reporting it here
   
   // Azure AD configuration
-  clientId: '...',             // Should differ per environment
-  tenantId: '...',             // May be same or different
+  clientId: '...',             // Public identifier — Low hygiene finding if reused across environments
+  tenantId: '...',             // Public identifier — may legitimately be the same
   authority: '...',
   
-  // Third-party service keys
-  googleMapsApiKey: '...',     // Should differ per environment
-  analyticsId: '...',          // Should differ per environment
+  // Third-party public keys
+  googleMapsApiKey: '...',     // Browser key — public identifier, Low if reused
+  analyticsId: '...',          // Public identifier — Low if reused
   
   // Feature flags
   features: {
@@ -117,13 +123,13 @@ export const environment = {
 };
 ```
 
-**Critical checks:**
-- API keys embedded in environment files
-- OAuth client IDs (should have separate apps per environment)
-- Third-party service keys
+**Checks:**
+- API keys or other secret-bearing values embedded in environment files — owned by check 1 (secrets.md); reference that finding instead of reporting it here
+- OAuth client IDs reused across environments (public identifier; separate app registrations per environment — Low)
+- Third-party public keys reused across environments (Google Maps browser keys, reCAPTCHA site keys, Stripe publishable keys, analytics IDs — Low)
 - Backend API URLs (should point to correct environment)
 
-**Note:** Angular environment files are compiled into the application bundle. Sensitive credentials should NOT be stored here; instead use backend configuration.
+**Note:** Angular environment files are compiled into the application bundle. Sensitive credentials should NOT be stored here; any secret-bearing value found here is owned by check 1 (secrets.md) and is reported there. Only public keys and identifiers are compared for reuse in this check.
 
 ## 3. Azure Pipeline Variable Files
 
@@ -138,16 +144,16 @@ export const environment = {
 
 **Credentials to compare:**
 - Database usernames and server names
-- Azure AD Client IDs / Application IDs
+- Azure AD Client IDs / Application IDs (public identifiers — Low if shared)
 - Storage account names
-- Service principal IDs
+- Service principal IDs (public identifiers — Low if shared)
 - API keys and endpoints
 - Service connection names
 - Key Vault names and URIs
 
 **Flags to raise:**
 - Identical `DatabaseUsername` across environments
-- Same `AzureClientId` or `ServicePrincipalId` values
+- Same `AzureClientId` or `ServicePrincipalId` values (Low — public identifier, hygiene)
 - Shared `ApiKey` values
 - Same `StorageAccountName` (should be globally unique per environment)
 
@@ -164,9 +170,9 @@ export const environment = {
 
 ## 5. What to Report
 
-**Report ALL instances of credential reuse (priority varies by environment pair):**
+**Report ALL instances of credential reuse (severity varies by environment pair and by whether the value is a credential or a public identifier):**
 
-### High Priority (CRITICAL):
+### Critical:
 - **Production credentials reused in Test/Development**
   - Immediate security risk
   - Could lead to production data exposure
@@ -176,23 +182,31 @@ export const environment = {
   - High risk of production impact
   - Testing could affect production systems
 
-### Medium-High Priority:
+### High:
 - **Staging/Acceptance credentials reused in Test/Development**
   - Risk of environment contamination
   - Staging should mirror production security
 
-- **Same service principal/app registration across all environments**
+- **Same service principal/app registration across all environments** (the client secret or certificate is shared; a shared `ClientId` alone is Low)
   - Compromised dev credentials affect all environments
   - Difficult to audit and track environment-specific access
 
-### Medium Priority:
+### Medium:
 - **Test credentials reused in Development**
   - Less critical but still not best practice
   - Makes access auditing difficult
 
-- **Shared API keys across any environments**
+- **Shared secret API keys across any environments**
   - Cannot revoke for one environment without affecting others
   - Difficult to track usage per environment
+
+### Low:
+- **Public identifiers shared across environments** (ClientId, TenantId, service principal IDs, Application Insights instrumentation keys or connection strings, analytics IDs, Google Maps browser keys, reCAPTCHA site keys, Stripe publishable keys)
+  - Hygiene only: no access is granted by the value itself
+  - Separate app registrations and telemetry resources per environment keep audit trails clean
+
+- **Same database username with a different password on a different server**
+  - Hygiene only; becomes the same credential (rate per the matrix above) when the password or the server is also shared
 
 ### What to document for each finding:
 
@@ -201,7 +215,7 @@ export const environment = {
 2. **Credential type** (database user, API key, client ID, etc.)
 3. **Credential identifier** (username, account name, app ID - NOT the password/secret)
 4. **Environments affected** (which environments share the credential)
-5. **Risk level** based on priority matrix above
+5. **Severity** (Critical / High / Medium / Low) based on the matrix above
 6. **Impact assessment**:
    - What resources does this credential access?
    - What could happen if dev/test credential is compromised?
@@ -218,8 +232,8 @@ Finding: Database Username Reused Across Environments
 - File 2: appsettings.Production.json
 - Credential Type: SQL Database Username
 - Value: "app_user"
-- Risk Level: HIGH
-- Impact: Development database credentials could potentially access production
+- Severity: Low (the servers and the passwords differ; when the password is also shared or both files point at the same server it is the same credential and is rated per the matrix above — Critical for a production credential in Development)
+- Impact: A shared login name makes per-environment auditing and revocation harder
 - Recommendation: Create separate database users (e.g., app_user_dev, app_user_prod)
 ```
 
@@ -234,27 +248,27 @@ Finding: Database Username Reused Across Environments
 - Cosmos DB account keys
 
 **Azure/Cloud credentials:**
-- Service Principal Client IDs
+- Service Principal Client IDs (public identifier — Low if shared)
 - Managed Identity names
 - Storage Account names and keys
 - App Service deployment credentials
 - Function App keys
 - Service Bus connection strings
 - Event Hub connection strings
-- Application Insights instrumentation keys
+- Application Insights instrumentation keys and connection strings (public identifier — Low if shared)
 
 **Third-party service credentials:**
 - Payment gateway API keys
 - Email service API keys
 - SMS service credentials
-- Analytics tracking IDs
-- Map service API keys
+- Analytics tracking IDs (public identifier — Low if shared)
+- Map service browser keys, reCAPTCHA site keys, Stripe publishable keys (public identifiers — Low if shared)
 - CDN credentials
-- OAuth provider client IDs
+- OAuth provider client IDs (public identifier — Low if shared)
 
 **Identity and authentication:**
 - Azure AD App Registrations (separate per environment)
-- OAuth client IDs and secrets
+- OAuth client secrets (client IDs are public identifiers — Low if shared)
 - JWT signing keys
 - API authentication tokens
 - Service account credentials
