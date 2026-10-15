@@ -147,6 +147,16 @@ aes.GenerateKey();
 
 **Severity:** a hard-coded or static key in source or configuration (`appsettings*.json`, Bicep parameters, pipeline variables) = Critical; a key that comes from a vault or Data Protection but has no documented rotation = Low.
 
+### Crypto-agility inventory (post-quantum readiness)
+
+NIST IR 8547 (initial public draft, November 2024) deprecates RSA, ECDSA and ECDH at 112-bit security after 2030 and disallows quantum-vulnerable public-key algorithms after 2035; the EU coordinated PQC implementation roadmap (June 2025) asks member states to start the transition by the end of 2026 and to migrate high-risk systems by 2030. .NET 10 ships `MLKem` (FIPS 203) plus `MLDsa` and `SlhDsa` (FIPS 204/205, `[Experimental]` SYSLIB5006), which require OpenSSL 3.5+ or Windows CNG with PQC support.
+
+For a baseline audit this is Low and informational; do not raise findings for using RSA or ECDSA today. Instead:
+- Inventory asymmetric usage: `RSA.Create(`, `ECDsa.Create(`, `ECDiffieHellman.Create(`, `X509Certificate2` signing or key exchange, certificate pinning, JWT signing algorithms (`RS256`, `ES256`, `SecurityAlgorithms.Rsa*` / `Ecdsa*`)
+- Note long-lived encrypted or signed data that must stay confidential or verifiable past 2030 (harvest-now-decrypt-later risk)
+- Recommend a migration plan: isolate algorithm choices behind configuration, track library and platform PQC support, prefer TLS with hybrid key exchange (see ssl_tls_configuration.md)
+Sources: https://csrc.nist.gov/pubs/ir/8547/ipd , https://digital-strategy.ec.europa.eu/en/library/coordinated-implementation-roadmap-transition-post-quantum-cryptography , https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-10/libraries
+
 ## 6. Angular Client-Side Cryptography
 
 **Files to examine:**
@@ -199,7 +209,7 @@ CryptoJS.PBKDF2(password, salt)          // HIGH before 4.2.0: SHA-1 with 1 iter
 - **Critical**: MD5/SHA-1 for passwords; DES or RC2; ECB protecting secrets or PII; hard-coded or static key; home-made cipher or hash protecting secrets
 - **High**: TripleDES; unsalted or low-iteration SHA-2 for passwords; unauthenticated CBC handed to clients; zero or static IV; `Random`/`Guid` for a secret; `CryptoJS.AES.encrypt` passphrase mode; `CryptoJS.PBKDF2` before 4.2.0
 - **Medium**: MD5/SHA-1 for non-security integrity checks; discontinued `crypto-js` dependency; unreviewed `weak-cryptography` hotspots
-- **Low**: key sizes above the minimum but below the recommendation (AES-128, RSA-2048); key without documented rotation
+- **Low**: key sizes above the minimum but below the recommendation (AES-128, RSA-2048); key without documented rotation; crypto-agility inventory (RSA/ECDSA/ECDH usage with no post-quantum migration plan — informational)
 
 ### Password hashing findings:
 
@@ -286,6 +296,9 @@ CipherMode\.ECB
 
 // Hardcoded keys (review carefully)
 new byte\[\]\s*\{.*\}.*[Kk]ey
+
+// Crypto-agility inventory (informational, Low — see section 5)
+RSA\.Create|ECDsa\.Create|ECDiffieHellman\.Create|RS256|ES256
 ```
 
 **Files to search:**

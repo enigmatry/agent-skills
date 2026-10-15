@@ -69,10 +69,13 @@ Sources: https://dotnet.microsoft.com/platform/support/policy/dotnet-core , http
 ## 5. Package Analysis Tools
 **Recommended scanning methods:**
 ```bash
-# .NET vulnerability scanning
+# .NET vulnerability scanning (.NET 10 SDK noun-first form; the verb-first `dotnet list package ...` still works as an alias)
 # ⚠️ ALWAYS include --include-transitive — direct-package scans miss the majority of real-world CVEs
-dotnet list package --vulnerable --include-transitive
-dotnet list package --deprecated --include-transitive
+dotnet package list --vulnerable --include-transitive --format json
+dotnet package list --deprecated --include-transitive --format json
+dotnet package update --vulnerable   # NuGet 7 / .NET 10 SDK: moves every vulnerable package to a fixed version
+dotnet nuget why <package>           # shows the transitive path that pulls a flagged package in
+# Source: https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-10/sdk
 
 # npm vulnerability scanning  
 npm audit
@@ -84,7 +87,58 @@ npm outdated
 # - OWASP Dependency Check
 # - WhiteSource/Mend
 # - GitHub Dependabot alerts
+# - GitHub Code Security for Azure DevOps: AdvancedSecurity-Dependency-Scanning@1 pipeline task
+#   (Advanced Security split into Code Security and Secret Protection in June 2025;
+#   https://devblogs.microsoft.com/devops/github-secret-protection-and-github-code-security-for-azure-devops/)
 ```
+
+### NuGetAudit configuration review
+
+Restore-time auditing is what produces `NU1901`–`NU1904` in the first place. Check `*.csproj`, `Directory.Build.props` and `Directory.Packages.props` for:
+- `<NuGetAudit>` — must not be `false`
+- `<NuGetAuditMode>all</NuGetAuditMode>` — must be set explicitly on net8.0 and net9.0 projects; their default is `direct`, which skips transitive packages (`all` is the default only from net10.0)
+- `<NuGetAuditLevel>` — `low` (default) or `moderate`; `high` or `critical` hides most advisories
+- every `<NuGetAuditSuppress Include="https://github.com/advisories/..." />` — needs a comment stating why the advisory does not apply
+- `<NoWarn>` must not list `NU1901`–`NU1904`
+
+Findings: audit disabled, or transitive audit off (`direct` mode or no `NuGetAuditMode` on net8.0/net9.0) = Medium; a suppression without a justification comment = Low.
+Sources: https://learn.microsoft.com/en-us/nuget/concepts/auditing-packages , https://learn.microsoft.com/en-us/dotnet/core/compatibility/sdk/10.0/nugetaudit-transitive-packages
+
+### Audit sources on private feeds
+
+When `nuget.config` lists only an Azure Artifacts feed, restore has no vulnerability database and the audit silently does nothing (`NU1905` warning). Check for both blocks:
+```xml
+<auditSources>
+  <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+</auditSources>
+<packageSourceMapping>
+  <clear />
+  <packageSource key="nuget.org"><package pattern="*" /></packageSource>
+  <packageSource key="azure-artifacts"><package pattern="Company.*" /></packageSource>
+</packageSourceMapping>
+```
+Findings: private feed with no `<auditSources>` = Medium; private feed without `<packageSourceMapping>` (dependency confusion: a public package with the same name as an internal one can be resolved from the wrong feed) = Low.
+Source: https://learn.microsoft.com/en-us/nuget/reference/errors-and-warnings/nu1905
+
+### npm supply-chain controls
+
+After the September 2025 chalk/debug compromise and the Shai-Hulud worm, npm revoked classic tokens (December 2025), introduced OIDC trusted publishing, added `min-release-age` (npm 11.10) and, with npm 12 (July 2026), blocks dependency lifecycle scripts by default. Check:
+- lockfile (`package-lock.json`, `yarn.lock` or `pnpm-lock.yaml`) committed and the pipeline runs `npm ci`, never `npm install`
+- `.npmrc` has `ignore-scripts=true`, or CI uses npm 12+ (`NodeTool@0`/`UseNode@1` version, `npm --version` in the build log)
+- `.npmrc` has `min-release-age=<days>` (pnpm: `minimumReleaseAge` in `pnpm-workspace.yaml`)
+- registry pinned: `registry=` or `@scope:registry=` lines for Azure Artifacts feeds
+- `npm audit signatures` runs in CI
+- no `git+`, tarball (`.tgz`) or `http://` entries in the lockfile `resolved` fields
+- dependencies that declare `preinstall`/`postinstall` scripts reviewed (`npm query ":attr(scripts, [postinstall])"`)
+- if the organisation publishes packages: trusted publishing (OIDC from the pipeline) instead of long-lived tokens
+
+Findings: no lockfile or `npm install` in CI = High; lifecycle scripts not blocked = Medium; no `min-release-age` or no `npm audit signatures` = Low.
+Sources: https://github.com/orgs/community/discussions/179562 , https://www.infoq.com/news/2026/08/npm-12-released/ , https://semgrep.dev/blog/2025/chalk-debug-and-color-on-npm-compromised-in-new-supply-chain-attack
+
+### SBOM (Low, informational)
+
+Check that the pipeline produces a software bill of materials: `npm sbom --sbom-format cyclonedx`, `dotnet CycloneDX` or `Microsoft.Sbom.Tool` (`sbom-tool generate`). Under the EU Cyber Resilience Act the 24-hour vulnerability-reporting duties apply since 11 September 2026 and the SBOM and vulnerability-handling obligations from 11 December 2027 for products with digital elements; custom-built and SaaS software may be out of scope, so report a missing SBOM as Low and informational.
+Source: https://www.jonesday.com/en/insights/2026/07/eu-cyber-resilience-act-24hour-reporting-duties-start-september-11-2026
 
 ## 6. Risk Assessment Criteria
 **Categorize findings by risk level:**
@@ -101,14 +155,17 @@ Use the NVD CVSS severity bands as reported by the advisory; do not shift them u
 - Deprecated packages with security implications
 - Packages targeting an end-of-life runtime (see section 3)
 - A lockfile `resolved` URL or a `nuget.config` package source outside the configured registries (see Additional Considerations)
+- No lockfile committed, or CI runs `npm install` instead of `npm ci` (section 5)
 
 **Medium (plan for update):**
 - CVSS 4.0–6.9
 - Significantly outdated packages (>2 major versions behind)
 - Non-security deprecation warnings
+- NuGetAudit disabled or transitive audit off on net8.0/net9.0; a private-feed-only `nuget.config` without `<auditSources>`; npm lifecycle scripts not blocked (section 5)
 
 **Low (monitor):**
 - CVSS 0.1–3.9
+- `NuGetAuditSuppress` without a justification comment; private feed without `<packageSourceMapping>`; no `min-release-age`; no `npm audit signatures`; no SBOM produced (section 5)
 
 Not findings: minor or patch updates available, pre-release versions available, documentation-only or feature-only updates, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
 

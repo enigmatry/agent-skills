@@ -413,6 +413,8 @@ public class ApplicationDbContext : DbContext
 - GDPR art. 8 - age of consent for information-society services (16 in the Netherlands)
 - UAVG art. 46 - BSN only with a statutory basis
 - PCI DSS for payment data (should not be stored directly)
+- EU Data Act (Regulation (EU) 2023/2854, applies since 12 September 2025) - relevant only when the product is a connected product or related service (IoT data access and B2B data-sharing obligations). If so, report one Low "verify with the product owner" item; otherwise not applicable. Source: https://digital-strategy.ec.europa.eu/en/policies/data-act
+- EU AI Act - relevant only when the application profiles people or makes automated decisions about them with an AI component (look for ML/LLM SDK packages such as `Microsoft.ML`, `Azure.AI.*`, `OpenAI`, or scoring/ranking of persons). If so, report one Low "verify with the product owner" item, not a code finding; the Digital Omnibus agreement postponed the Annex III high-risk obligations to 2 December 2027. Source: https://www.gibsondunn.com/eu-ai-act-omnibus-agreement-postponed-high-risk-deadlines-and-other-key-changes/
 
 ✅ **Documentation:**
 - Data inventory documenting what is stored and why
@@ -523,6 +525,7 @@ public class ApplicationDbContext : DbContext
 - **High**: the same sensitive field exposed only to the authenticated owner or to admins; other special-category data (GDPR art. 9: race, ethnicity, religion, sexual orientation, biometric) or financial data (bank account, IBAN, salary, credit score) stored without need
 - **Medium**: other PII (email, phone, address, date of birth) exposed without a frontend need; ordinary PII (date of birth, full address, phone numbers, gender, marital status, precise location) stored without need
 - **Low**: non-sensitive over-fetch (unused ordinary fields, full entity in a lookup, legacy fields kept for backward compatibility); non-sensitive data stored without need (age range, city/country, preferences)
+- **Low**: EU Data Act or EU AI Act applicability "verify with the product owner" item (section 13); not a code finding
 - **Not a finding**: ids, foreign keys and `CreatedBy`/`ModifiedBy`, unless they expose another user's PII to non-admins; a stored field assessed JUSTIFIED. QUESTIONABLE or POTENTIALLY JUSTIFIED stored fields are rated one level lower than NOT JUSTIFIED.
 
 Remediate in the order of that severity; there is no separate priority scale. Within one severity, remove unused fields first (no functional cost), then REPLACE or DERIVE fields that have a less sensitive alternative (age range instead of date of birth, city/postal code instead of a full address), then JUSTIFY and document the remaining fields.

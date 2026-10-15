@@ -221,6 +221,21 @@ app.MapPost("/api/users", async (MyModel model, IValidator<MyModel> validator) =
 });
 ```
 
+**.NET 10 built-in minimal API validation (opt-in):**
+```csharp
+// GOOD — enables DataAnnotations and IValidatableObject on minimal API parameters; invalid input returns ValidationProblem (400)
+builder.Services.AddValidation();
+
+// Types that are not endpoint parameters themselves are validated when marked
+[ValidatableType]
+public class OrderLine { ... }
+
+// RED FLAG — opts the endpoint out of validation
+app.MapPost("/api/orders", (Order order) => ...).DisableValidation();
+```
+Flags: a net10.0 minimal API project that relies on DataAnnotations without `builder.Services.AddValidation()` (the attributes are silently ignored) = Medium; `.DisableValidation()` on an endpoint that takes user input = Medium.
+Source: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis/validation
+
 **Entity Framework Core:**
 ```csharp
 // Check for validation before SaveChanges
@@ -239,6 +254,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - API endpoints accepting user input without validation
 - Model/DTO classes without validation attributes
 - Missing `ModelState.IsValid` checks (when not using `[ApiController]`)
+- net10.0 minimal API projects using DataAnnotations without `AddValidation()`, or `.DisableValidation()` on an endpoint that takes user input (Medium)
 - File upload endpoints without type/size validation
 - Numeric inputs without range validation
 - Text inputs without length constraints
@@ -310,6 +326,9 @@ Map(Post|Put|Patch)\([^,]+,\s*(async\s*)?\(\s*(\[From(Body|Form|Query)\]\s*)?(\w
 public string .* \{ get; set; \}
 public int .* \{ get; set; \}
 public decimal .* \{ get; set; \}
+
+// .NET 10 minimal API validation (opt-in; absence or opt-out is Medium)
+AddValidation\(\)|\.DisableValidation\(\)|\[ValidatableType\]
 
 // Direct user input usage
 Request.Query\[|Request.Form\[|Request.Headers\[

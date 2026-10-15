@@ -26,6 +26,8 @@ Before checking results, identify how SonarQube is connected to the project.
 - task: SonarCloudPrepare
 ```
 
+**Task versions:** pipelines should use `SonarQubePrepare@7` / `SonarQubeAnalyze@7` / `SonarQubePublish@7` (SonarQube Server extension; `@6` and older are deprecated) or `SonarCloudPrepare@3` / `SonarCloudAnalyze@3` / `SonarCloudPublish@3` (SonarQube Cloud extension), with `scannerMode: dotnet` for this stack. A task pinned to an older major (for example `SonarQubePrepare@5`, `SonarCloudPrepare@2`) is Low. Source: https://docs.sonarsource.com/sonarqube-server/2026.2/analyzing-source-code/ci-integration/azure-pipelines/sonarqube-tasks
+
 ```xml
 <!-- MSBuild warning configuration -->
 <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -79,6 +81,8 @@ Report "security analyzers not enabled" as a Medium finding when none of the acc
 - Vulnerable packages do not fail CI (Medium). Compliant when either `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` is set (it promotes `NU1903`/`NU1904` with every other warning) or `<WarningsAsErrors>` lists `NU1903;NU1904`. Red flag when neither is set, or when `TreatWarningsAsErrors=true` is combined with `<WarningsNotAsErrors>` that lists `NU1903` or `NU1904` (Microsoft's documented pattern of excluding only `NU1901;NU1902` is fine). Reference: https://learn.microsoft.com/nuget/concepts/auditing-packages
 - Vulnerability advisories present in restore output but not acted on (rate by the advisory's CVSS band as in check 2, packages.md)
 - `NU1900` or `NU1905` in the restore output: the audit could not run (no vulnerability data source configured), which is itself a Medium finding
+
+**GitHub Advanced Security for Azure DevOps:** if the pipeline contains `AdvancedSecurity-Codeql-Init@1`, `AdvancedSecurity-Codeql-Autobuild@1`, `AdvancedSecurity-Codeql-Analyze@1`, `AdvancedSecurity-Dependency-Scanning@1` or `MicrosoftSecurityDevOps@1`, pull the CodeQL and dependency alerts into the audit (Repos > Advanced Security, or the build's Advanced Security tab; ask the user for a screenshot or export when no MCP access exists). The product split into GitHub Code Security (CodeQL, dependency scanning) and GitHub Secret Protection (secret scanning, push protection) in June 2025, so either can be enabled on its own. Report each unactioned CodeQL alert of High or Critical severity at the alert's own severity; rate dependency alerts by CVSS band as in packages.md. Source: https://devblogs.microsoft.com/devops/github-secret-protection-and-github-code-security-for-azure-devops/
 
 ## 3. SonarQube — Security Ratings (Overall Code)
 
@@ -134,7 +138,7 @@ For each security-related build warning or SonarQube security finding, provide:
 - **Rule or warning ID** (e.g. `CA2100`, `S3649`)
 - **File** and line number where available
 - **Description** of the issue
-- **Severity**: High (Blocker or Critical/High Security issue, broken crypto, injection risk) / Medium (Major or Medium Security issue; an unreviewed Security Hotspot with review priority High) / Low (Minor or Low Security issue; an unreviewed Security Hotspot with review priority Medium or Low; a suppressed security warning). Use the hotspot's own review priority, never a flat Medium
+- **Severity**: High (Blocker or Critical/High Security issue, broken crypto, injection risk) / Medium (Major or Medium Security issue; an unreviewed Security Hotspot with review priority High) / Low (Minor or Low Security issue; an unreviewed Security Hotspot with review priority Medium or Low; a suppressed security warning; a Sonar pipeline task pinned to a deprecated major). An unactioned CodeQL alert takes the alert's own severity. Use the hotspot's own review priority, never a flat Medium
 - **Recommendation**: remediation step or link to SonarQube rule documentation
 
 ### Technical Debt (report separately, low priority)
