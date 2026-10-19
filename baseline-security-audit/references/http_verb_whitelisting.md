@@ -397,6 +397,10 @@ Finding: Unused HTTP Verb Allowed
 
 // Also check for AcceptVerbs
 \[AcceptVerbs\("([^"]+)"\)\]
+
+// Minimal APIs and non-controller endpoints (Program.cs, *Endpoints.cs, extension methods)
+\bMap(Get|Post|Put|Delete|Patch|Methods|Group|HealthChecks|Hub|GraphQL|OpenApi)\(
+\[EnableQuery\]
 ```
 
 **ASP.NET MVC/Web API** — legacy (.NET Framework), not expected on this stack:
@@ -412,6 +416,7 @@ Finding: Unused HTTP Verb Allowed
 ```
 *Controller.cs
 Controllers/**/*.cs
+Program.cs, Startup.cs, **/*Endpoints.cs
 ```
 
 ### Search web.config Files:

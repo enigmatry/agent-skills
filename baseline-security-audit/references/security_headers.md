@@ -33,13 +33,22 @@ Analyze response security headers and removal of version-disclosing headers to i
 
 > ⚠️ **Multi-app projects** (e.g. a project with both a frontoffice and a backoffice) will have multiple `web.config` files. Before evaluating any `web.config`, determine whether it belongs to a **frontend** (Angular) app or a **backend** (API) app by inspecting its parent folder and sibling files (e.g. presence of `index.html`, `*.js` bundles → frontend; presence of `*.dll`, `appsettings.json` → backend). Apply the front-end header rules to frontend configs and the API header rules to backend configs. Report findings per app, not as a single combined result.
 
-**Configuration location in web.config:**
+**Complete front-end web.config (the API block is in section 10):**
 ```xml
+<?xml version="1.0" encoding="utf-8"?>
 <configuration>
   <system.webServer>
     <httpProtocol>
       <customHeaders>
-        <!-- Security headers go here -->
+        <add name="Content-Security-Policy" value="default-src 'none'; base-uri 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'" />
+        <add name="X-Frame-Options" value="DENY" />
+        <add name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains; preload" />
+        <add name="X-Content-Type-Options" value="nosniff" />
+        <add name="Referrer-Policy" value="no-referrer" />
+        <add name="Permissions-Policy" value="camera=(), microphone=(), geolocation=(), payment=()" />
+        <add name="Cross-Origin-Opener-Policy" value="same-origin" />
+        <add name="Cross-Origin-Resource-Policy" value="same-origin" />
+        <add name="X-Permitted-Cross-Domain-Policies" value="none" />
       </customHeaders>
     </httpProtocol>
   </system.webServer>
@@ -102,8 +111,10 @@ style-src 'self' 'nonce-{random}';
 style-src 'self' 'sha256-{hash}';
 
 <!-- BAD -->
-style-src 'unsafe-inline';  <!-- CSS injection, data exfiltration risk -->
+style-src 'unsafe-inline';  <!-- CSS injection, data exfiltration risk; Low on an Angular app (see below) -->
 ```
+
+**Angular CSP reality:** a `'nonce-...'` value in a static `web.config` is a fixed string, which equals no nonce (Medium). The supported options are a server-injected nonce via `ngCspNonce` / `CSP_NONCE` (SSR or a rewrite step), build-time `security.autoCsp` in `angular.json` (hash-based, scripts only, not with SSR), or accepting `style-src 'unsafe-inline'` because Angular injects component styles at runtime. Rate `style-src 'unsafe-inline'` Low with that remediation; `script-src 'unsafe-inline'` stays Medium.
 
 **5. frame-ancestors** (MUST specify - not covered by default-src):
 ```xml
@@ -115,6 +126,8 @@ frame-ancestors 'self';
 
 <!-- BAD - Missing this directive -->
 ```
+
+**6. object-src 'none' and upgrade-insecure-requests** (OWASP baseline; each absent = Medium): `object-src 'none'` is only implied when `default-src` is `'none'`, so add it explicitly with `default-src 'self'`; `upgrade-insecure-requests` rewrites mixed-content requests to HTTPS.
 
 **RED FLAGS:**
 ```xml
@@ -307,7 +320,10 @@ services.AddCors(options =>
     <add name="X-Frame-Options" value="DENY" />
     <add name="X-Content-Type-Options" value="nosniff" />
     <add name="Referrer-Policy" value="no-referrer" />
-    <add name="Permissions-Policy" value="geolocation=(), microphone=(), camera=()" />
+    <add name="Permissions-Policy" value="camera=(), microphone=(), geolocation=(), payment=()" />
+    <add name="Cross-Origin-Opener-Policy" value="same-origin" />
+    <add name="Cross-Origin-Resource-Policy" value="same-origin" />
+    <add name="X-Permitted-Cross-Domain-Policies" value="none" />
   </customHeaders>
 </httpProtocol>
 ```
@@ -321,7 +337,10 @@ app.Use(async (context, next) =>
     context.Response.Headers.Add("X-Frame-Options", "DENY");
     context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
     context.Response.Headers.Add("Referrer-Policy", "no-referrer");
-    context.Response.Headers.Add("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    context.Response.Headers.Add("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+    context.Response.Headers.Add("Cross-Origin-Opener-Policy", "same-origin");
+    context.Response.Headers.Add("Cross-Origin-Resource-Policy", "same-origin");
+    context.Response.Headers.Add("X-Permitted-Cross-Domain-Policies", "none");
     
     await next();
 });
@@ -337,7 +356,12 @@ app.Use(async (context, next) =>
 - Minimal CSP for APIs (no content rendering)
 
 **3. Permissions-Policy** (formerly Feature-Policy)
-- Disables browser features APIs don't need
+- Disables browser features APIs don't need; minimum feature list `camera=(), microphone=(), geolocation=(), payment=()` (a shorter list = Medium)
+
+**4. Remaining OWASP baseline headers (front-end and API; each missing = Medium):**
+- `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none`
+- `Cross-Origin-Embedder-Policy: require-corp` only where the app tolerates it (it blocks cross-origin resources that lack CORP/CORS); otherwise not a finding
+- `Clear-Site-Data: "cache","cookies","storage"` on the logout response (check the sign-out action, not the global header block)
 
 **RED FLAGS for APIs:**
 ```xml
@@ -440,8 +464,9 @@ app.Run();
 |---------|----------|
 | `Content-Security-Policy` missing | High |
 | `Strict-Transport-Security` missing, `max-age` below one year, or `includeSubDomains` absent | High |
-| CSP present but weak (`unsafe-inline` / `unsafe-eval` / `data:` / `blob:` in `script-src`, `default-src *`, missing `base-uri`, missing `frame-ancestors`) | Medium |
-| `X-Content-Type-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy` missing | Medium |
+| CSP present but weak (`unsafe-inline` / `unsafe-eval` / `data:` / `blob:` in `script-src`, `default-src *`, missing `base-uri`, missing `frame-ancestors`, `object-src 'none'` or `upgrade-insecure-requests` absent, static `'nonce-...'` string in `web.config`) | Medium |
+| `X-Content-Type-Options`, `Permissions-Policy` (or without the minimum feature list), `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy`, `X-Permitted-Cross-Domain-Policies` missing; `Clear-Site-Data` absent on logout; `Cross-Origin-Embedder-Policy` absent where the app tolerates it | Medium |
+| `style-src 'unsafe-inline'` on an Angular app (runtime component styles; see section 3) | Low |
 | `Referrer-Policy` set to `unsafe-url` or `no-referrer-when-downgrade` | Medium |
 | `Cache-Control: no-store` missing on API responses; CDN resource without SRI; CORS `*` combined with credentials | Medium |
 | `X-Frame-Options` missing while CSP `frame-ancestors` is present, or misaligned with it | Low |
@@ -463,7 +488,7 @@ Finding: Missing/Misconfigured Security Header
 - Recommendation: [Correct configuration]
 ```
 
-**Example reports:**
+**Example report:**
 
 ```
 Finding: Missing Content Security Policy
@@ -473,66 +498,6 @@ Finding: Missing Content Security Policy
 - Issue: No CSP header present
 - Risk: High - Application vulnerable to XSS attacks, no CSP protection
 - Recommendation: Add CSP header starting with default-src 'none'; base-uri 'self'; frame-ancestors 'none'
-```
-
-```
-Finding: Unsafe CSP Configuration
-- Header: Content-Security-Policy
-- Location: web.config, line 15
-- Current Value: default-src 'self'; script-src 'self' 'unsafe-inline'
-- Issue: script-src allows 'unsafe-inline'
-- Risk: Medium - Inline scripts allowed, reduces XSS protection
-- Recommendation: Remove 'unsafe-inline', use nonces or hashes for inline scripts
-```
-
-```
-Finding: Missing HSTS Header
-- Header: Strict-Transport-Security
-- Location: web.config
-- Current Value: Not configured
-- Issue: No HSTS enforcement
-- Risk: High - Users could be downgraded to HTTP, MITM attacks possible
-- Recommendation: Add Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-```
-
-```
-Finding: Misaligned X-Frame-Options and CSP
-- Header: X-Frame-Options vs frame-ancestors
-- Location: web.config
-- Current Value: X-Frame-Options: SAMEORIGIN, frame-ancestors 'none'
-- Issue: Conflicting frame protection directives
-- Risk: Low - Inconsistent framing policy across browsers
-- Recommendation: Align both: either DENY/'none' or SAMEORIGIN/'self'
-```
-
-```
-Finding: API Missing Cache-Control Header
-- Header: Cache-Control
-- Location: API responses (check middleware/web.config)
-- Current Value: Not configured
-- Issue: API responses may be cached
-- Risk: Medium - Sensitive data could be stored in browser/proxy caches
-- Recommendation: Add Cache-Control: no-store for all API responses
-```
-
-```
-Finding: CDN Resources Missing SRI
-- Header: Subresource Integrity
-- Location: src/index.html, line 12
-- Current Value: <script src="https://cdn.../library.js"></script>
-- Issue: No integrity attribute for external resource
-- Risk: Medium - CDN compromise could inject malicious code
-- Recommendation: Add integrity="sha384-..." and crossorigin="anonymous"
-```
-
-```
-Finding: Server Header Discloses IIS Version
-- Header: Server
-- Location: API responses (all endpoints)
-- Current Value: Server: Microsoft-IIS/10.0
-- Issue: Server header reveals IIS version
-- Risk: Low - Attackers can identify platform and target known IIS 10.0 vulnerabilities
-- Recommendation: Add removeServerHeader="true" to web.config under <security><requestFiltering>
 ```
 
 ## 13. Search Patterns
@@ -547,6 +512,10 @@ X-Content-Type-Options
 Referrer-Policy
 Cache-Control
 Permissions-Policy
+Cross-Origin-Opener-Policy
+Cross-Origin-Resource-Policy
+X-Permitted-Cross-Domain-Policies
+Clear-Site-Data
 Access-Control-Allow-Origin
 
 <!-- Check for version-header removal -->
@@ -584,67 +553,14 @@ Response.Headers.Remove
 <!-- Check for integrity attributes -->
 integrity=
 crossorigin=
+
+<!-- CSP nonce / hash support (index.html, main.ts, angular.json) -->
+ngCspNonce
+CSP_NONCE
+autoCsp
 ```
 
-## 14. Complete Configuration Examples
-
-**Front-end web.config (Angular application):**
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <system.webServer>
-    <httpProtocol>
-      <customHeaders>
-        <add name="Content-Security-Policy" value="default-src 'none'; base-uri 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'" />
-        <add name="X-Frame-Options" value="DENY" />
-        <add name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains; preload" />
-        <add name="X-Content-Type-Options" value="nosniff" />
-        <add name="Referrer-Policy" value="no-referrer" />
-        <add name="Permissions-Policy" value="geolocation=(), microphone=(), camera=()" />
-      </customHeaders>
-    </httpProtocol>
-  </system.webServer>
-</configuration>
-```
-
-**API (web.config or ASP.NET Core middleware):** use the header block in section 10 unchanged; it is not repeated here.
-
-## 15. Best Practices Verification
-
-**Verify the application follows:**
-
-✅ **Front-end (Angular):**
-- CSP header present and contains `default-src 'none'` or `default-src 'self'` (order does not matter)
-- CSP includes `base-uri 'self'` and `frame-ancestors 'none'`
-- No `unsafe-inline`, `unsafe-eval`, `data:`, `blob:` in script-src
-- No `unsafe-inline` in style-src
-- X-Frame-Options aligns with CSP frame-ancestors
-- HSTS with max-age ≥ 31536000
-- X-Content-Type-Options: nosniff
-- Referrer-Policy configured
-- SRI for all CDN resources
-
-✅ **API (Backend):**
-- Cache-Control: no-store on responses
-- Minimal CSP: default-src 'none'; frame-ancestors 'none'
-- X-Frame-Options: DENY
-- X-Content-Type-Options: nosniff
-- Referrer-Policy: no-referrer
-- Permissions-Policy configured
-
-✅ **Version-disclosing headers (API and front-end):**
-- `Server` removed via `removeServerHeader="true"` in web.config (`AddServerHeader = false` on Kestrel for `linux`)
-- `X-Powered-By` removed via `<remove name="X-Powered-By" />` in web.config
-- `enableVersionHeader="false"` for legacy .NET Framework applications only
-- Configuration applied to both API and front-end web.config files
-
-✅ **General:**
-- Headers configured in web.config or middleware
-- No conflicting header values
-- CORS properly configured (not *)
-- Regular security header audits
-
-## 16. Testing Security Headers
+## 14. Testing Security Headers
 
 **Manual verification:**
 

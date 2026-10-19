@@ -74,6 +74,13 @@ Committed values like these in `appsettings*.json`, `environment.ts` or pipeline
 *.yml (Azure Pipelines), .github/workflows/*.yml (GitHub Actions)
 ```
 
+**Also examine (high-yield, often overlooked; a production credential in any of them is Critical per What to Report):**
+- `Properties/launchSettings.json`, `*.pubxml` / `*.pubxml.user`, `local.settings.json`, Data Protection `key-*.xml`
+- `.npmrc` (`_authToken`, `:_password=`), `nuget.config` `<packageSourceCredentials>` with `ClearTextPassword`
+- `web.config` `<aspNetCore><environmentVariables>`, `Jwt:Key` / signing keys in `appsettings*.json`
+- `*.bicepparam` and `*.parameters.json`, `docker-compose*.yml` `environment:`, inline `variables:` in `azure-pipelines*.yml`
+- Tool configs: `.mcp.json`, `.vscode/settings.json`
+
 ## 3. Source Code Secret Patterns
 
 **Identify dangerous coding patterns that expose secrets:**
@@ -247,6 +254,8 @@ Source: https://github.com/gitleaks/gitleaks
 - `appsettings.Staging.json` - Staging/Acceptance environment
 - `appsettings.Production.json` - Production environment
 - `appsettings.*.json` - Any other environment-specific files
+
+**Base-file inheritance:** a value in `appsettings.json` applies to every environment whose override file does not replace it, so compare the effective value per environment (base plus override), not the files in isolation. A production connection string or credential in the base file is effectively shared with every environment (High).
 
 **Credentials to compare across environments:**
 
@@ -426,7 +435,7 @@ For each finding, provide:
 
 ### Configuration and tooling
 
-- **Medium**: `ClientSecret` used where managed identity or federated identity is possible (section 8 remediation); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
+- **Medium**: `ClientSecret` used where managed identity or federated identity is possible, and SQL passwords or Storage / Service Bus / Cosmos DB account keys used where Entra authentication with `disableLocalAuth` is possible (section 8 remediation); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
 
 ### Credential reuse across environments
 
