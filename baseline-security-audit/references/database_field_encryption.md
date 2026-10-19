@@ -60,13 +60,12 @@ Always Encrypted performs column-level encryption entirely within the database d
 ```
 
 **Always Encrypted is declared in T-SQL, not through EF column types** (`HasColumnType` says nothing about encryption). Search migrations, `*.sql` scripts and DACPAC projects for:
-- `ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = ...)` on the column, `CREATE COLUMN MASTER KEY`, `CREATE COLUMN ENCRYPTION KEY` (often inside `migrationBuilder.Sql(...)`)
+- `ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = ...)` on the column definition (often inside `migrationBuilder.Sql(...)`); the column master and encryption keys themselves are created outside source control
 - The `Microsoft.Data.SqlClient.AlwaysEncrypted.AzureKeyVaultProvider` package and `SqlConnection.RegisterColumnEncryptionKeyStoreProviders(...)` at startup when the column master key lives in Key Vault
 - `Column Encryption Setting=Enabled` in the connection string (above); without it the driver returns ciphertext and the application breaks, so its presence is a strong signal that encryption is in use
 
 **RED FLAGS:**
 - Sensitive columns present in the database schema but `Column Encryption Setting` is absent from all connection strings
-- No `CREATE COLUMN MASTER KEY` / `CREATE COLUMN ENCRYPTION KEY` / `ENCRYPTED WITH` anywhere in the repository although the connection string enables column encryption (ask the user whether the keys were created outside source control)
 - Sensitive fields stored as plain `nvarchar` or `varchar` without any encryption wrapper
 
 ## 3. Application-Level Encryption (EF Core Value Converters)
@@ -141,8 +140,6 @@ var keyBytes = await keyVaultClient.GetSecretAsync("FieldEncryptionKey");
 
 **Check for:**
 - No key rotation strategy in place
-
-Reading the key through `IConfiguration` (`config["Encryption:Key"]`, `IOptions<EncryptionOptions>`) is not a finding when the provider is Key Vault (`AddAzureKeyVault`) or an App Service Key Vault reference (`@Microsoft.KeyVault(...)`); the finding is the key value itself present in `appsettings*.json`, pipeline variables or source (Critical, reported by check 13 (cryptography_security.md)).
 
 Report missing key-rotation evidence for the column-encryption key as Low; hard-coded or static keys are reported by check 13 (cryptography_security.md).
 

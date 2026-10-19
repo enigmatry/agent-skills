@@ -22,7 +22,6 @@ Search for string interpolation, concatenation, or formatting used to build SQL 
 - `FromSqlRaw()`, `ExecuteSqlRaw()`, `ExecuteSqlRawAsync()`, `SqlQueryRaw<T>()`
 - `CommandText` assignments with dynamic content (`SqlCommand`, Dapper `Query`/`Execute`)
 - Flag when the SQL string is built with `+`, `$"..."` assigned to a `string` first, `string.Format`, `StringBuilder`, or `string.Concat`
-- Dapper (`connection.Query/QueryAsync/QueryFirst/QuerySingle/Execute(sql)`) and ADO.NET (`SqlCommand.CommandText`, `new SqlCommand(sql)`, `new SqlDataAdapter(sql, conn)`) with a concatenated or interpolated `sql` — same severity scale as EF raw SQL; anonymous-object parameters (`new { id }`) and `Parameters.AddWithValue` are safe
 - The legacy `System.Data.SqlClient` package is unsupported: flag its `PackageReference` as Medium and recommend `Microsoft.Data.SqlClient`
 
 **Safe by construction** (these take a `FormattableString` and EF Core parameterizes every `{value}`):
