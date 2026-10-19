@@ -102,8 +102,10 @@ style-src 'self' 'nonce-{random}';
 style-src 'self' 'sha256-{hash}';
 
 <!-- BAD -->
-style-src 'unsafe-inline';  <!-- CSS injection, data exfiltration risk -->
+style-src 'unsafe-inline';  <!-- CSS injection, data exfiltration risk; Low on an Angular app (see below) -->
 ```
+
+**Angular CSP reality:** a `'nonce-...'` value in a static `web.config` is a fixed string, which equals no nonce (Medium). The supported options are a server-injected nonce via `ngCspNonce` / `CSP_NONCE` (SSR or a rewrite step), build-time `security.autoCsp` in `angular.json` (hash-based, scripts only, not with SSR), or accepting `style-src 'unsafe-inline'` because Angular injects component styles at runtime. Rate `style-src 'unsafe-inline'` Low with that remediation; `script-src 'unsafe-inline'` stays Medium.
 
 **5. frame-ancestors** (MUST specify - not covered by default-src):
 ```xml
@@ -115,6 +117,8 @@ frame-ancestors 'self';
 
 <!-- BAD - Missing this directive -->
 ```
+
+**6. object-src 'none' and upgrade-insecure-requests** (OWASP baseline; each absent = Medium): `object-src 'none'` is only implied when `default-src` is `'none'`, so add it explicitly with `default-src 'self'`; `upgrade-insecure-requests` rewrites mixed-content requests to HTTPS.
 
 **RED FLAGS:**
 ```xml
@@ -307,7 +311,10 @@ services.AddCors(options =>
     <add name="X-Frame-Options" value="DENY" />
     <add name="X-Content-Type-Options" value="nosniff" />
     <add name="Referrer-Policy" value="no-referrer" />
-    <add name="Permissions-Policy" value="geolocation=(), microphone=(), camera=()" />
+    <add name="Permissions-Policy" value="camera=(), microphone=(), geolocation=(), payment=()" />
+    <add name="Cross-Origin-Opener-Policy" value="same-origin" />
+    <add name="Cross-Origin-Resource-Policy" value="same-origin" />
+    <add name="X-Permitted-Cross-Domain-Policies" value="none" />
   </customHeaders>
 </httpProtocol>
 ```
@@ -321,7 +328,10 @@ app.Use(async (context, next) =>
     context.Response.Headers.Add("X-Frame-Options", "DENY");
     context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
     context.Response.Headers.Add("Referrer-Policy", "no-referrer");
-    context.Response.Headers.Add("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    context.Response.Headers.Add("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+    context.Response.Headers.Add("Cross-Origin-Opener-Policy", "same-origin");
+    context.Response.Headers.Add("Cross-Origin-Resource-Policy", "same-origin");
+    context.Response.Headers.Add("X-Permitted-Cross-Domain-Policies", "none");
     
     await next();
 });
@@ -337,7 +347,12 @@ app.Use(async (context, next) =>
 - Minimal CSP for APIs (no content rendering)
 
 **3. Permissions-Policy** (formerly Feature-Policy)
-- Disables browser features APIs don't need
+- Disables browser features APIs don't need; minimum feature list `camera=(), microphone=(), geolocation=(), payment=()` (a shorter list = Medium)
+
+**4. Remaining OWASP baseline headers (front-end and API; each missing = Medium):**
+- `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none`
+- `Cross-Origin-Embedder-Policy: require-corp` only where the app tolerates it (it blocks cross-origin resources that lack CORP/CORS); otherwise not a finding
+- `Clear-Site-Data: "cache","cookies","storage"` on the logout response (check the sign-out action, not the global header block)
 
 **RED FLAGS for APIs:**
 ```xml
@@ -440,8 +455,9 @@ app.Run();
 |---------|----------|
 | `Content-Security-Policy` missing | High |
 | `Strict-Transport-Security` missing, `max-age` below one year, or `includeSubDomains` absent | High |
-| CSP present but weak (`unsafe-inline` / `unsafe-eval` / `data:` / `blob:` in `script-src`, `default-src *`, missing `base-uri`, missing `frame-ancestors`) | Medium |
-| `X-Content-Type-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy` missing | Medium |
+| CSP present but weak (`unsafe-inline` / `unsafe-eval` / `data:` / `blob:` in `script-src`, `default-src *`, missing `base-uri`, missing `frame-ancestors`, `object-src 'none'` or `upgrade-insecure-requests` absent, static `'nonce-...'` string in `web.config`) | Medium |
+| `X-Content-Type-Options`, `Permissions-Policy` (or without the minimum feature list), `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy`, `X-Permitted-Cross-Domain-Policies` missing; `Clear-Site-Data` absent on logout; `Cross-Origin-Embedder-Policy` absent where the app tolerates it | Medium |
+| `style-src 'unsafe-inline'` on an Angular app (runtime component styles; see section 3) | Low |
 | `Referrer-Policy` set to `unsafe-url` or `no-referrer-when-downgrade` | Medium |
 | `Cache-Control: no-store` missing on API responses; CDN resource without SRI; CORS `*` combined with credentials | Medium |
 | `X-Frame-Options` missing while CSP `frame-ancestors` is present, or misaligned with it | Low |
@@ -547,6 +563,10 @@ X-Content-Type-Options
 Referrer-Policy
 Cache-Control
 Permissions-Policy
+Cross-Origin-Opener-Policy
+Cross-Origin-Resource-Policy
+X-Permitted-Cross-Domain-Policies
+Clear-Site-Data
 Access-Control-Allow-Origin
 
 <!-- Check for version-header removal -->
@@ -584,6 +604,11 @@ Response.Headers.Remove
 <!-- Check for integrity attributes -->
 integrity=
 crossorigin=
+
+<!-- CSP nonce / hash support (index.html, main.ts, angular.json) -->
+ngCspNonce
+CSP_NONCE
+autoCsp
 ```
 
 ## 14. Complete Configuration Examples
@@ -600,7 +625,10 @@ crossorigin=
         <add name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains; preload" />
         <add name="X-Content-Type-Options" value="nosniff" />
         <add name="Referrer-Policy" value="no-referrer" />
-        <add name="Permissions-Policy" value="geolocation=(), microphone=(), camera=()" />
+        <add name="Permissions-Policy" value="camera=(), microphone=(), geolocation=(), payment=()" />
+        <add name="Cross-Origin-Opener-Policy" value="same-origin" />
+        <add name="Cross-Origin-Resource-Policy" value="same-origin" />
+        <add name="X-Permitted-Cross-Domain-Policies" value="none" />
       </customHeaders>
     </httpProtocol>
   </system.webServer>
@@ -617,7 +645,8 @@ crossorigin=
 - CSP header present and contains `default-src 'none'` or `default-src 'self'` (order does not matter)
 - CSP includes `base-uri 'self'` and `frame-ancestors 'none'`
 - No `unsafe-inline`, `unsafe-eval`, `data:`, `blob:` in script-src
-- No `unsafe-inline` in style-src
+- No `unsafe-inline` in style-src, or the Angular justification from section 3 (Low); `object-src 'none'` and `upgrade-insecure-requests` present
+- COOP / CORP `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, Permissions-Policy minimum list, `Clear-Site-Data` on logout
 - X-Frame-Options aligns with CSP frame-ancestors
 - HSTS with max-age ≥ 31536000
 - X-Content-Type-Options: nosniff

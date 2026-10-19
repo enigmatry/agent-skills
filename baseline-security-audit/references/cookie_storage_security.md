@@ -78,6 +78,8 @@ A missing `SameSite` attribute means the browser applies `Lax`; report that as L
 - **Secure = Always**: Only transmit over HTTPS (prevents MITM)
 - **SameSite = Strict/Lax**: Prevents CSRF attacks
 
+**`CookieSecurePolicy.SameAsRequest` is the framework default.** Behind TLS termination at Front Door, Application Gateway or a reverse proxy the request reaches Kestrel as HTTP, so `Secure` is not set unless `UseForwardedHeaders` runs before authentication or `SecurePolicy = Always` is configured. An authentication or session cookie without `Secure` on the live response is High.
+
 ## 2. Backend Cookie Creation and Modification
 
 **Check manual cookie operations in controllers:**

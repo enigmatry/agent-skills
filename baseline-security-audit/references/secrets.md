@@ -74,6 +74,13 @@ Committed values like these in `appsettings*.json`, `environment.ts` or pipeline
 *.yml (Azure Pipelines), .github/workflows/*.yml (GitHub Actions)
 ```
 
+**Also examine (high-yield, often overlooked; a production credential in any of them is Critical per What to Report):**
+- `Properties/launchSettings.json`, `*.pubxml` / `*.pubxml.user`, `local.settings.json`, Data Protection `key-*.xml`
+- `.npmrc` (`_authToken`, `:_password=`), `nuget.config` `<packageSourceCredentials>` with `ClearTextPassword`
+- `web.config` `<aspNetCore><environmentVariables>`, `Jwt:Key` / signing keys in `appsettings*.json`
+- `*.bicepparam` and `*.parameters.json`, `docker-compose*.yml` `environment:`, inline `variables:` in `azure-pipelines*.yml`
+- Tool configs: `.mcp.json`, `.vscode/settings.json`
+
 ## 3. Source Code Secret Patterns
 
 **Identify dangerous coding patterns that expose secrets:**
@@ -248,6 +255,8 @@ Source: https://github.com/gitleaks/gitleaks
 - `appsettings.Production.json` - Production environment
 - `appsettings.*.json` - Any other environment-specific files
 
+**Base-file inheritance:** a value in `appsettings.json` applies to every environment whose override file does not replace it, so compare the effective value per environment (base plus override), not the files in isolation. A production connection string or credential in the base file is effectively shared with every environment (High).
+
 **Credentials to compare across environments:**
 
 **Database connection strings:**
@@ -401,6 +410,8 @@ export const environment = {
 
 **Prefer eliminating client secrets altogether.** Managed identity for Azure-hosted workloads, federated identity credentials for pipelines and external workloads, and certificates where neither fits remove the secret that would otherwise be committed, reused or rotated. Report `ClientSecret` usage (`AzureAd:ClientSecret`, `ClientSecretCredential`, `.WithClientSecret(`) where managed identity or federated identity is possible as Medium, and recommend a tenant app management policy that blocks `passwordAddition` and caps `passwordLifetime` so no new secrets can be added to the app registrations. Source: https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-app-management-policies
 
+**Apply the same credential-free check to every other credential type (primary check; Medium because the credential exists at all, in addition to any reuse finding):** SQL connection strings with `User Id`/`Password` where `Authentication=Active Directory Default` or `Active Directory Managed Identity` is possible; Storage, Service Bus and Cosmos DB account keys / `SharedAccessKey` connection strings where a `TokenCredential` (managed identity) with `disableLocalAuth: true` on the resource is possible.
+
 **For third-party APIs:**
 1. Request separate API keys per environment from vendors
 2. Use environment-specific accounts/tenants where available
@@ -426,7 +437,7 @@ For each finding, provide:
 
 ### Configuration and tooling
 
-- **Medium**: `ClientSecret` used where managed identity or federated identity is possible (section 8 remediation); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
+- **Medium**: `ClientSecret` used where managed identity or federated identity is possible, and SQL passwords or Storage / Service Bus / Cosmos DB account keys used where Entra authentication with `disableLocalAuth` is possible (section 8 remediation); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
 
 ### Credential reuse across environments
 
