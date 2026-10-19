@@ -42,7 +42,7 @@ Analyze response security headers and removal of version-disclosing headers to i
       <customHeaders>
         <add name="Content-Security-Policy" value="default-src 'none'; base-uri 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'" />
         <add name="X-Frame-Options" value="DENY" />
-        <add name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains; preload" />
+        <add name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains" />
         <add name="X-Content-Type-Options" value="nosniff" />
         <add name="Referrer-Policy" value="no-referrer" />
         <add name="Permissions-Policy" value="camera=(), microphone=(), geolocation=(), payment=()" />
@@ -100,7 +100,7 @@ script-src blob:;             <!-- Allows blob: URIs - XSS risk -->
 ```
 
 **Inline scripts handling:**
-- **Preferred**: Use nonces (cryptographically random, unique per request)
+- **Preferred**: Use nonces (cryptographically random, unique per request) together with `'strict-dynamic'`
 - **Alternative**: Use SHA-256/SHA-384/SHA-512 hashes
 - **Never**: Use 'unsafe-inline'
 
@@ -115,6 +115,8 @@ style-src 'unsafe-inline';  <!-- CSS injection, data exfiltration risk; Low on a
 ```
 
 **Angular CSP reality:** a `'nonce-...'` value in a static `web.config` is a fixed string, which equals no nonce (Medium). The supported options are a server-injected nonce via `ngCspNonce` / `CSP_NONCE` (SSR or a rewrite step), build-time `security.autoCsp` in `angular.json` (hash-based, scripts only, not with SSR), or accepting `style-src 'unsafe-inline'` because Angular injects component styles at runtime. Rate `style-src 'unsafe-inline'` Low with that remediation; `script-src 'unsafe-inline'` stays Medium.
+
+**CSP Level 3:** the preferred script policy is `script-src 'nonce-{RANDOM}' 'strict-dynamic'` (or hashes with `'strict-dynamic'`), which lets nonced scripts load their own dependencies; send violation reports with `report-to` plus a `Reporting-Endpoints` header (`report-uri` is deprecated). A `Content-Security-Policy-Report-Only` header is monitoring, not enforcement: without an enforcing `Content-Security-Policy` header, report CSP as missing (High). Angular supports Trusted Types via `require-trusted-types-for 'script'; trusted-types angular angular#bundler`; their absence is not a finding (recommendation only).
 
 **5. frame-ancestors** (MUST specify - not covered by default-src):
 ```xml
@@ -178,13 +180,13 @@ frame-ancestors 'self';
 
 **GOOD configuration:**
 ```xml
-<add name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains; preload" />
+<add name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains" />
 ```
 
 **Parameters:**
 - `max-age=31536000` - 1 year (minimum recommended)
 - `includeSubDomains` - Apply to all subdomains
-- `preload` - Eligible for browser preload list (optional)
+- `preload` - optional opt-in for the browser preload list; hstspreload.org advises against adding it by default and inclusion is near-irreversible, so never flag its absence (not a finding)
 
 **HSTS may also be configured via the `Enigmatry.Entry.AspNetCore` package** using the `AddEntryHttps` / `UseEntryHttps` extension methods in `Program.cs` / `Startup.cs`. Search for these calls before concluding HSTS is missing:
 ```csharp
@@ -192,6 +194,11 @@ services.AddEntryHttps();
 app.UseEntryHttps();
 ```
 If the project uses the `Enigmatry.Entry` HTTPS helpers, verify the effective HSTS value on the live URL or in the package source; do not assume it meets the one-year `max-age` / `includeSubDomains` minimum. On `linux` hosting (no `web.config`) the equivalent is `builder.Services.AddHsts(o => { o.MaxAge = TimeSpan.FromDays(365); o.IncludeSubDomains = true; })` with `app.UseHsts()`.
+
+**Other sources that count as configured (read them before concluding HSTS is missing):**
+- `app.UseHsts()` without `AddHsts(options => ...)` defaults to a 30-day `max-age` without `includeSubDomains` (existing High row); the options must set both
+- IIS 10 (1709+) native `<hsts enabled="true" max-age="31536000" includeSubDomains="true" />` under `<site>` in `applicationHost.config` or `web.config`
+- `NetEscapades.AspNetCore.SecurityHeaders` (`AddSecurityHeaderPolicies`, `UseSecurityHeaders`) emits HSTS, CSP and the other headers from a policy object; read the policy instead of grepping for header names
 
 **RED FLAGS:**
 ```xml
@@ -332,19 +339,21 @@ services.AddCors(options =>
 ```csharp
 app.Use(async (context, next) =>
 {
-    context.Response.Headers.Add("Cache-Control", "no-store");
-    context.Response.Headers.Add("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
-    context.Response.Headers.Add("X-Frame-Options", "DENY");
-    context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
-    context.Response.Headers.Add("Referrer-Policy", "no-referrer");
-    context.Response.Headers.Add("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
-    context.Response.Headers.Add("Cross-Origin-Opener-Policy", "same-origin");
-    context.Response.Headers.Add("Cross-Origin-Resource-Policy", "same-origin");
-    context.Response.Headers.Add("X-Permitted-Cross-Domain-Policies", "none");
+    context.Response.Headers.Append("Cache-Control", "no-store");
+    context.Response.Headers.Append("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("Referrer-Policy", "no-referrer");
+    context.Response.Headers.Append("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+    context.Response.Headers.Append("Cross-Origin-Opener-Policy", "same-origin");
+    context.Response.Headers.Append("Cross-Origin-Resource-Policy", "same-origin");
+    context.Response.Headers.Append("X-Permitted-Cross-Domain-Policies", "none");
     
     await next();
 });
 ```
+
+**One source per header:** `IHeaderDictionary.Add` throws on a duplicate key (analyzer ASP0019), so samples use `Append` or the indexer. When `web.config` `customHeaders` and middleware (or a library) both set the same header, IIS appends a second copy: two CSP headers are enforced as their intersection and two HSTS headers take the first. Exactly one source per header is expected; the same header emitted twice on the live response = Medium.
 
 ### API-Specific Headers:
 
@@ -380,6 +389,10 @@ app.Use(async (context, next) =>
 - **X-Powered-By** - Reveals framework and version (e.g., "ASP.NET", "ASP.NET Core 6.0")
 - **X-AspNet-Version** - Reveals specific ASP.NET version (e.g., "4.0.30319") — legacy (.NET Framework), not expected on this stack
 - **X-AspNetMvc-Version** - Reveals ASP.NET MVC version — legacy (.NET Framework), not expected on this stack
+- **X-SourceFiles** - IIS Express / Visual Studio debugging header (base64-encoded local path); must never reach production
+- **SourceMap** / **X-SourceMap** - point the browser at source maps; see check 10 (code_minification.md) for the `.map` files themselves
+- Developer exception pages and default IIS error pages that name the platform; see check 4 (exception_handling.md) for the exception page itself
+- **Server** added in front of the app by Front Door, Application Gateway or nginx (`edge` modifier): only visible on the live response; the Kestrel / IIS settings below do not reach it, strip it at the edge
 
 > `X-AspNet-Version`, `X-AspNetMvc-Version` and `<httpRuntime enableVersionHeader="false" />` exist only on .NET Framework. ASP.NET Core never emits these headers, so their absence (and the absence of `enableVersionHeader`) is **not** a finding on an ASP.NET Core project; only report them if the live response actually contains them.
 
@@ -462,18 +475,20 @@ app.Run();
 
 | Finding | Severity |
 |---------|----------|
-| `Content-Security-Policy` missing | High |
+| `Content-Security-Policy` missing (a `Content-Security-Policy-Report-Only` header alone does not count as present) | High |
 | `Strict-Transport-Security` missing, `max-age` below one year, or `includeSubDomains` absent | High |
 | CSP present but weak (`unsafe-inline` / `unsafe-eval` / `data:` / `blob:` in `script-src`, `default-src *`, missing `base-uri`, missing `frame-ancestors`, `object-src 'none'` or `upgrade-insecure-requests` absent, static `'nonce-...'` string in `web.config`) | Medium |
 | `X-Content-Type-Options`, `Permissions-Policy` (or without the minimum feature list), `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy`, `X-Permitted-Cross-Domain-Policies` missing; `Clear-Site-Data` absent on logout; `Cross-Origin-Embedder-Policy` absent where the app tolerates it | Medium |
 | `style-src 'unsafe-inline'` on an Angular app (runtime component styles; see section 3) | Low |
 | `Referrer-Policy` set to `unsafe-url` or `no-referrer-when-downgrade` | Medium |
 | `Cache-Control: no-store` missing on API responses; CDN resource without SRI; CORS `*` combined with credentials | Medium |
+| Same header emitted twice on the live response (`web.config` `customHeaders` plus middleware or a library; see section 10) | Medium |
 | `X-Frame-Options` missing while CSP `frame-ancestors` is present, or misaligned with it | Low |
-| HSTS `preload` absent | Low |
+| HSTS `preload` absent | not a finding |
 | `Referrer-Policy` absent (browser default `strict-origin-when-cross-origin` applies) | Low |
-| `Server`, `X-Powered-By`, `X-AspNet-Version` or `X-AspNetMvc-Version` present in a live response (version information disclosure) | Low |
+| `Server` (including one added by Front Door, Application Gateway or nginx), `X-Powered-By`, `X-AspNet-Version`, `X-AspNetMvc-Version`, `X-SourceFiles`, `SourceMap` / `X-SourceMap` present in a live production response, or an error page naming the platform (version information disclosure) | Low |
 | `Response.Headers.Remove("Server")` middleware used as the remediation for version-disclosing headers (non-working; see section 11) | Low |
+| Deprecated header present: `X-XSS-Protection` (OWASP: omit or `0`), `Expect-CT`, `Public-Key-Pins`, `Feature-Policy` (replaced by `Permissions-Policy`), `Report-To` (replaced by `Reporting-Endpoints`) | Low |
 
 **For each missing or misconfigured header:**
 
@@ -517,11 +532,21 @@ Cross-Origin-Resource-Policy
 X-Permitted-Cross-Domain-Policies
 Clear-Site-Data
 Access-Control-Allow-Origin
+Content-Security-Policy-Report-Only
+Reporting-Endpoints
+<hsts enabled=
 
 <!-- Check for version-header removal -->
 removeServerHeader
 <remove name="X-Powered-By" />
 enableVersionHeader
+
+<!-- Deprecated headers: present = Low, recommend removal -->
+X-XSS-Protection
+Expect-CT
+Public-Key-Pins
+Feature-Policy
+Report-To
 
 <!-- Check for unsafe CSP values -->
 unsafe-inline
@@ -535,7 +560,11 @@ blob:
 // Program.cs / Startup.cs
 app.Use
 Response.Headers.Add
+Response.Headers.Append
 UseHsts
+AddHsts
+AddSecurityHeaderPolicies
+UseSecurityHeaders
 UseXContentTypeOptions
 UseReferrerPolicy
 UseCsp

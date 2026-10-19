@@ -119,7 +119,7 @@ var apiKey = _configuration["ExternalApi:ApiKey"];
 **Check for:**
 ```csharp
 // Proper secret management patterns
-services.AddAzureKeyVault(configuration);
+builder.Configuration.AddAzureKeyVault(new Uri(vaultUri), new DefaultAzureCredential()); // Azure.Extensions.AspNetCore.Configuration.Secrets
 Environment.GetEnvironmentVariable("SECRET_NAME");
 _configuration["ConnectionStrings:Database"]; // From secure store
 
@@ -383,7 +383,9 @@ export const environment = {
 - Identical `DatabaseUsername` across environments
 - Same `AzureClientId` or `ServicePrincipalId` values (Low — public identifier, hygiene)
 - Shared `ApiKey` values
-- Same `StorageAccountName` (should be globally unique per environment)
+- Same `StorageAccountName`, SQL Server host, Key Vault name or URI, Service Bus namespace or app registration — shared infrastructure between two environments (Medium; production sharing with any non-production environment = High)
+
+**Secret handling in pipeline steps:** secret variables (variable-group secrets, Key Vault task outputs, `isSecret`) reach scripts only through an explicit `env:` mapping on the step, never as command-line arguments (`-Password $(DbPassword)`) or `echo`ed; a value derived from a secret is re-marked with `##vso[task.setvariable variable=x;issecret=true]`; masking is best-effort and never masks substrings or transformed values. A secret on a command line or echoed = Medium.
 
 ### Deployment profiles
 
@@ -436,6 +438,7 @@ For each finding, provide:
 ### Configuration and tooling
 
 - **Medium**: `ClientSecret` used where managed identity or federated identity is possible, and SQL passwords or Storage / Service Bus / Cosmos DB account keys used where Entra authentication with `disableLocalAuth` is possible (section 8 remediation); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
+- **Medium**: a pipeline secret passed as a command-line argument or echoed instead of mapped through `env:` (section 8)
 
 ### Credential reuse across environments
 
@@ -464,6 +467,8 @@ For each finding, provide:
 - **Test credentials reused in Development**
   - Less critical but still not best practice
   - Makes access auditing difficult
+
+- **Shared infrastructure between two environments** (same SQL Server host, Key Vault, storage account, Service Bus namespace or app registration; High when production shares with any non-production environment)
 
 - **Shared secret API keys across any environments**
   - Cannot revoke for one environment without affecting others

@@ -59,6 +59,15 @@ Verify that security-relevant events are written to a dedicated audit log, separ
 - Role changes
 - Organisation or tenant changes
 - Permission modifications
+- Password change and reset
+- MFA enrolment and removal
+- Token or API-key issuance and revocation
+- Privileged or admin actions
+- Access to, export or deletion of sensitive records
+- Consent changes
+- Failed authorization (403)
+- Configuration changes
+- When sign-in is delegated to Entra ID, sign-in and MFA events live in the Entra sign-in and audit logs; their absence in the app is not a finding
 
 Audit records MUST contain the acting user's id, UPN or email as the actor, together with the timestamp, action, target and outcome (section 4 explains why the actor identifier is not a sensitive-data finding). Severity when authentication, authorization or privileged actions (role, permission, tenant changes) are not audited = High; audit events written only to the general application log with no separate sink or category = Medium.
 
@@ -76,6 +85,7 @@ Audit records MUST contain the acting user's id, UPN or email as the actor, toge
 - User change events: email changes, role assignments, organisation updates
 - Domain events or audit event handlers
 - Dedicated audit logging categories or contexts
+- Audit-sink patterns: Serilog `.Filter.ByIncludingOnly(Matching.FromSource("Audit"))` sub-logger or `AuditTo`, an `ILogger<AuditLogger>` category routed to its own sink, an EF `SaveChangesInterceptor` writing an `AuditLog` table
 
 **Alerting (OWASP A09 is "Logging and Alerting Failures"):** look for Azure Monitor alert rules (`Microsoft.Insights/scheduledQueryRules` or `metricAlerts` in Bicep, `az monitor` in pipelines) or Sentinel analytics rules covering failed-login bursts, 5xx spikes and audit-log silence (no audit events for N hours), and for log-shipping health (diagnostic settings or agent heartbeat). No alerting on security events, found in code or confirmed by the user = High.
 
@@ -136,7 +146,7 @@ Order ids, customer ids, counts and performance or usage metrics are not finding
 - Application Insights or APM tools capturing sensitive request data
 - Log files stored in insecure locations
 
-See check 6 (sensitive_query_strings.md) for query-string values in access logs.
+See check 6 (sensitive_query_strings.md) for query-string values in access logs and for the OpenTelemetry `url.query` redaction switch (`DISABLE_URL_QUERY_REDACTION` / `DisableUrlQueryRedaction`).
 
 ### 4.7 Data Masking and Redaction Gaps
 
@@ -144,6 +154,7 @@ See check 6 (sensitive_query_strings.md) for query-string values in access logs.
 - Inconsistent redaction patterns across the application
 - Sensitive data in plain text in log outputs
 - Missing sanitization before logging user inputs
+- Log injection: `LogInformation($"User {name} logged in")` — string interpolation instead of a message template lets user input forge log lines (CRLF) and breaks structured logging (Sonar S6670); interpolated user input in a log call = Low
 
 ### 4.8 Compliance and Regulatory Concerns
 
@@ -172,6 +183,7 @@ System\.Debug\s*[:=]\s*true                          // Azure DevOps diagnostic 
 console\.(log|debug|info)\([^)]*(token|password|Authorization)
 scheduledQueryRules|metricAlerts|actionGroups|SecurityInsights   // alert rules (section 3); none = High
 AuditTo\.|WriteTo\.File\([^)]*[Aa]udit|retentionInDays|immutab   // audit sink integrity and retention (section 3)
+Log(Information|Warning|Error|Debug|Trace)\(\$"                   // log injection via interpolation (section 4.7); Low
 ```
 
 ## What to Report
@@ -193,4 +205,4 @@ For each sensitive-data finding (section 4), provide:
 - **Critical**: credentials, tokens, session ids, BSN/SSN, PAN/CVV in logs
 - **High**: no global exception logging (exceptions reach no sink, or are logged without the exception object); audit events not logged for authentication, authorization or privileged actions; no alerting on security events; audit events writable or deletable by the application identity; special-category or financial payload in logs; exception messages carrying connection strings or user secrets
 - **Medium**: console the only sink in production, or `Microsoft.*` / `System.*` categories at `Information` or lower in production; audit events not separated from the application log; no evidence of audit-log integrity, access control or retention; email, name or phone logged as payload rather than as the acting user; request or response bodies logged
-- **Low**: missing correlation ids
+- **Low**: missing correlation ids; interpolated user input in a log call (log injection)

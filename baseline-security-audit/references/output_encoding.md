@@ -52,6 +52,8 @@ window.location = userValue;
 [innerHTML]="userHtml"
 ```
 
+**Trusted Types (recommendation, not a finding):** `require-trusted-types-for 'script'` in the CSP with Angular's built-in policies (`angular`, `angular#unsafe-bypass`) is the DOM-XSS control for the sinks above; the directive itself is specified in check 14 (security_headers.md) section 3.
+
 **Documentation reference:** https://angular.dev/best-practices/security
 
 ## 2. Razor Views and Pages (ASP.NET)
@@ -174,6 +176,8 @@ Sources: https://mend.io/vulnerability-database/CVE-2026-25543 , https://securit
 ```
 **Pattern:** `style="[^"]*@(Model|ViewBag|ViewData)` in `*.cshtml`; `bypassSecurityTrustStyle` in `*.ts` (Angular sanitizes `[style.*]`/`[ngStyle]` bindings, so only the bypass is a finding).
 
+**HTML served from APIs (no Razor or Angular involved):** `ContentResult`/`Results.Content(..., "text/html")` built from user input, and user uploads (SVG, HTML) served inline without `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff` = High (stored XSS). Search: `"text/html"`, `Results\.Content\(`, `File\(|PhysicalFile\(` returning uploads, `Content-Disposition`.
+
 ## 5. What to Report
 
 **Report ALL instances of (rate each per the Risk Assessment below):**
@@ -183,6 +187,7 @@ Sources: https://mend.io/vulnerability-database/CVE-2026-25543 , https://securit
 - Unencoded output in JavaScript, URL, or CSS contexts
 - Rich text editors without proper whitelist configuration
 - Stored rich text rendered without a server-side sanitizer call, or a sanitizer package below the floor version (section 3)
+- User input returned as `text/html` from an API, or uploaded SVG/HTML served inline without `Content-Disposition: attachment` and `nosniff` (section 4)
 - Any case where user input is rendered without encoding (except properly configured rich text fields)
 
 **For each finding, provide:**
@@ -197,6 +202,7 @@ Sources: https://mend.io/vulnerability-database/CVE-2026-25543 , https://securit
 - **Critical**: Content from unauthenticated input rendered without encoding (reflected XSS reachable without login)
 - **High**: Content that originated from any user rendered without encoding, regardless of whether it is reflected or read back from the database or an API — stored XSS is High irrespective of storage location. Admin-supplied content rendered to other users is cross-user impact and is also High
 - **High**: Persisted user-supplied HTML rendered through `bypassSecurityTrustHtml` or a direct DOM write without a server-side sanitizer call; Medium when it is only ever rendered through a plain `[innerHTML]` binding (section 3)
+- **High**: User input returned as `text/html` from an API, or an uploaded SVG/HTML file served inline (section 4)
 - **Medium**: Admin-supplied content rendered only back to the same admin, or system-originated content (configuration, internal service) rendered through a bypass without justification; admin-supplied input is never rated below Medium
 - **Medium**: `Ganss.Xss.HtmlSanitizer` below 9.0.892 or DOMPurify below 3.4.0 (section 3)
 - **Low**: Bypass applied to compile-time constant content with no documented justification

@@ -28,10 +28,10 @@ services.AddIdentity<ApplicationUser, IdentityRole>()
 KeyDerivation.Pbkdf2(password, salt, KeyDerivationPrf.HMACSHA512,
     iterationCount: 210_000, numBytesRequested: 32);
 
-// BCrypt
+// BCrypt (work factor 10+; input is truncated at 72 bytes — pre-hash or reject longer passwords)
 BCrypt.HashPassword(password, workFactor: 12);
 
-// Argon2 (best for new implementations)
+// Argon2id (best for new implementations): m=19 MiB, t=2, p=1 minimum; scrypt: N=2^17, r=8, p=1 (OWASP)
 ```
 
 **RED FLAGS - Insecure password hashing:**
@@ -42,7 +42,7 @@ SHA1.Create().ComputeHash(...)          // Broken
 SHA256.Create().ComputeHash(...)        // Too fast, no salt
 ```
 
-**Severity:** MD5 or SHA-1 for passwords = Critical; unsalted or un-iterated SHA-2 = High; custom `KeyDerivation.Pbkdf2` / `Rfc2898DeriveBytes.Pbkdf2` below 600,000 iterations (SHA-256) or 210,000 (SHA-512) = High (OWASP Password Storage Cheat Sheet); the Identity default above is not a finding. See check 19 (authentication_security.md) for password policy.
+**Severity:** MD5 or SHA-1 for passwords = Critical; unsalted or un-iterated SHA-2 = High; custom `KeyDerivation.Pbkdf2` / `Rfc2898DeriveBytes.Pbkdf2` below 600,000 iterations (SHA-256) or 210,000 (SHA-512) = High (OWASP Password Storage Cheat Sheet); Argon2id below m=19 MiB/t=2/p=1, scrypt below N=2^17/r=8/p=1, bcrypt work factor below 10 or bcrypt with silently truncated input = Medium; the Identity default above is not a finding. See check 19 (authentication_security.md) for password policy.
 
 ## 2. General Data Hashing
 
@@ -137,8 +137,9 @@ byte[] key = Encoding.UTF8.GetBytes(password); // BAD - Weak derivation
 var client = new SecretClient(new Uri(vaultUrl), new DefaultAzureCredential());
 var secret = await client.GetSecretAsync("EncryptionKey");
 
-// Data Protection API
+// Data Protection API: ProtectKeysWithAzureKeyVault alone keeps the key ring on local disk; pair it with a shared repository
 services.AddDataProtection()
+    .PersistKeysToAzureBlobStorage(...)
     .ProtectKeysWithAzureKeyVault(...);
 
 // Strong key generation
@@ -146,7 +147,9 @@ aes.KeySize = 256;
 aes.GenerateKey();
 ```
 
-**Severity:** a hard-coded or static key in source or configuration (`appsettings*.json`, Bicep parameters, pipeline variables) = Critical; a key that comes from a vault or Data Protection but has no documented rotation = Low.
+**Severity:** a hard-coded or static key in source or configuration (`appsettings*.json`, Bicep parameters, pipeline variables) = Critical; a key that comes from a vault or Data Protection but has no documented rotation = Low; `ProtectKeysWithAzureKeyVault` without `PersistKeysTo*` on multi-instance App Service or containers = Medium.
+
+**JWT signing (`AddJwtBearer`, `JwtSecurityTokenHandler`, `JsonWebTokenHandler`):** `alg: none` accepted (`RequireSignedTokens = false`, `ValidateIssuerSigningKey = false`), HS256 with a symmetric key shorter than 256 bits or a password-like `Jwt:Key` string, `new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]))` = High (a key committed in config is also check 1 (secrets.md)). `IdentityModelEventSource.ShowPII = true` outside Development = Medium; the search pattern is owned by check 5 (logging.md) section 5.
 
 ### Crypto-agility inventory (post-quantum readiness)
 
@@ -208,8 +211,8 @@ CryptoJS.PBKDF2(password, salt)          // HIGH before 4.2.0: SHA-1 with 1 iter
 
 **Severity:**
 - **Critical**: MD5/SHA-1 for passwords; DES or RC2; ECB protecting secrets or PII; hard-coded or static key; home-made cipher or hash protecting secrets
-- **High**: TripleDES; unsalted or low-iteration SHA-2 for passwords; custom PBKDF2 below 600,000 (SHA-256) / 210,000 (SHA-512) iterations; `PasswordDeriveBytes` or the SHA-1/1000-iteration `Rfc2898DeriveBytes` constructor for passwords; unauthenticated CBC handed to clients; zero or static IV; `Random`/`Guid` for a secret; `CryptoJS.AES.encrypt` passphrase mode; `CryptoJS.PBKDF2` before 4.2.0
-- **Medium**: MD5/SHA-1 for non-security integrity checks; obsolete .NET crypto APIs (SYSLIB0021/0022/0023/0033/0041/0045/0053: `Rijndael*`, `*CryptoServiceProvider`, `*Managed`, `RNGCryptoServiceProvider`, `HashAlgorithm.Create(string)`, `AesGcm(key)` without a tag size); discontinued `crypto-js` dependency; unreviewed `weak-cryptography` hotspots
+- **High**: TripleDES; unsalted or low-iteration SHA-2 for passwords; custom PBKDF2 below 600,000 (SHA-256) / 210,000 (SHA-512) iterations; `PasswordDeriveBytes` or the SHA-1/1000-iteration `Rfc2898DeriveBytes` constructor for passwords; unauthenticated CBC handed to clients; zero or static IV; `Random`/`Guid` for a secret; `CryptoJS.AES.encrypt` passphrase mode; `CryptoJS.PBKDF2` before 4.2.0; JWT `alg: none` accepted or a short or password-like HS256 signing key
+- **Medium**: MD5/SHA-1 for non-security integrity checks; Argon2id, scrypt or bcrypt below the section 1 parameters or bcrypt with truncated input; `ProtectKeysWithAzureKeyVault` without a shared key repository on multi-instance hosting; `IdentityModelEventSource.ShowPII = true` outside Development; obsolete .NET crypto APIs (SYSLIB0021/0022/0023/0033/0041/0045/0053: `Rijndael*`, `*CryptoServiceProvider`, `*Managed`, `RNGCryptoServiceProvider`, `HashAlgorithm.Create(string)`, `AesGcm(key)` without a tag size); discontinued `crypto-js` dependency; unreviewed `weak-cryptography` hotspots
 - **Low**: key sizes above the minimum but below the recommendation (AES-128, RSA-2048); key without documented rotation; crypto-agility inventory (RSA/ECDSA/ECDH usage with no post-quantum migration plan — informational)
 
 ### Password hashing findings:
@@ -304,6 +307,9 @@ new Rfc2898DeriveBytes\(|PasswordDeriveBytes|HashAlgorithm\.Create\(\s*"|new Aes
 
 // Crypto-agility inventory (informational, Low — see section 5)
 RSA\.Create|ECDsa\.Create|ECDiffieHellman\.Create|RS256|ES256
+
+// JWT signing and Data Protection key ring (section 5)
+SymmetricSecurityKey\(Encoding\.|RequireSignedTokens\s*=\s*false|ValidateIssuerSigningKey\s*=\s*false|HmacSha256|ProtectKeysWithAzureKeyVault|PersistKeysTo
 ```
 
 **Files to search:**

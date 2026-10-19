@@ -30,7 +30,7 @@ services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
         options.Cookie.HttpOnly = true;      // MUST be true
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;  // MUST be Always
         options.Cookie.SameSite = SameSiteMode.Lax;     // Lax (the framework default) for auth cookies; Strict breaks the OIDC /signin-oidc POST callback
-        options.Cookie.Name = "YourApp.Auth";
+        options.Cookie.Name = "__Host-YourApp.Auth";  // __Host- prefix: browser enforces Secure, Path=/ and no Domain
         options.ExpireTimeSpan = TimeSpan.FromHours(1);
         options.SlidingExpiration = true;
     });
@@ -43,7 +43,7 @@ services.AddSession(options =>
     options.Cookie.HttpOnly = true;          // MUST be true
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;  // MUST be Always
     options.Cookie.SameSite = SameSiteMode.Lax;     // Lax for session cookies that must survive the OIDC redirect
-    options.Cookie.Name = "YourApp.Session";
+    options.Cookie.Name = "__Host-YourApp.Session";
     options.IdleTimeout = TimeSpan.FromMinutes(30);
     options.Cookie.IsEssential = true;
 });
@@ -78,6 +78,8 @@ A missing `SameSite` attribute means the browser applies `Lax`; report that as L
 - **Secure = Always**: Only transmit over HTTPS (prevents MITM)
 - **SameSite = Strict/Lax**: Prevents CSRF attacks
 
+**Cookie prefixes:** name authentication, session and antiforgery cookies `__Host-...` (`options.Cookie.Name = "__Host-..."`, also in `AddAntiforgery`; the browser rejects the cookie unless it is `Secure`, has `Path=/` and no `Domain`) and other first-party cookies `__Secure-...`. An authentication, session or antiforgery cookie without a prefix = Low.
+
 **`CookieSecurePolicy.SameAsRequest` is the framework default.** Behind TLS termination at Front Door, Application Gateway or a reverse proxy the request reaches Kestrel as HTTP, so `Secure` is not set unless `UseForwardedHeaders` runs before authentication or `SecurePolicy = Always` is configured. An authentication or session cookie without `Secure` on the live response is High.
 
 ## 2. Backend Cookie Creation and Modification
@@ -98,11 +100,12 @@ var cookieOptions = new CookieOptions
     Secure = true,       // MUST be true
     SameSite = SameSiteMode.Strict,  // SHOULD be Strict or Lax
     Expires = DateTimeOffset.UtcNow.AddDays(7),
-    Path = "/",
-    Domain = ".yourdomain.com"
+    Path = "/"
 };
 Response.Cookies.Append("PreferenceKey", "value", cookieOptions);
 ```
+
+An explicit `Domain` shares the cookie with every subdomain and rules out the `__Host-` prefix; an explicit `Domain` on an authentication, session or antiforgery cookie = Low.
 
 **Flags to raise:**
 ```csharp
@@ -371,6 +374,8 @@ const derived = await crypto.subtle.deriveKey(
 | `XSRF-TOKEN` (must be JavaScript-readable) | High if `Secure` is missing; `HttpOnly` absence is by design | Low |
 | Preference or UI cookie | Low | Low |
 
+Also Low: an authentication, session or antiforgery cookie whose name lacks the `__Host-` prefix, or that sets an explicit `Domain` (sections 1 and 2).
+
 For each finding, provide:
 - **Location**: File path and line number
 - **Cookie name**: Name of the cookie
@@ -496,7 +501,7 @@ SameSite = SameSiteMode.None, Secure = true
 - All cookies have `Secure = true` (require HTTPS); `UseForwardedHeaders` is configured behind Front Door or Application Gateway so `CookieSecurePolicy` sees HTTPS
 - All cookies have appropriate `SameSite` setting
 - Authentication cookies use `SameSite = Lax`; OIDC correlation/nonce cookies use `None; Secure`
-- Cookie names don't reveal sensitive information
+- Cookie names don't reveal sensitive information; authentication, session and antiforgery cookies carry the `__Host-` prefix and set no `Domain`
 - Cookies have appropriate expiration times
 
 ✅ **Local storage security:**

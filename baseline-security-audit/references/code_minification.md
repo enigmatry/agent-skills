@@ -116,16 +116,7 @@ module.exports = {
 
 **Critical checks for third-party resources:**
 
-**Verify use of minified versions:**
-```html
-<!-- BAD - Development version -->
-<script src="https://cdn.example.com/library.js"></script>
-<link href="https://cdn.example.com/styles.css" rel="stylesheet">
-
-<!-- GOOD - Minified version -->
-<script src="https://cdn.example.com/library.min.js"></script>
-<link href="https://cdn.example.com/styles.min.css" rel="stylesheet">
-```
+**Third-party resources loaded from a CDN:** every external `<script>`/`<link>` in `index.html` needs `integrity` and `crossorigin` attributes, or the dependency is bundled instead (Angular: `"subresourceIntegrity": true` in the build options hashes its own bundles); a CDN resource without SRI = Medium. See check 14 (security_headers.md) section 9.
 
 **Check package.json dependencies:**
 - Verify production builds use minified versions from CDNs
@@ -222,6 +213,8 @@ export default defineConfig({
 - Upload source maps to error tracking service (Sentry, etc.)
 - Do NOT serve source maps publicly
 - Store source maps securely on the server only
+
+**Deployed `.map` files (executable check):** look for pipeline publish/copy steps (`CopyFiles@2`, `PublishPipelineArtifact@1`, `AzureWebApp@1`) whose `contents` include `*.map` or lack a `!**/*.map` exclusion; an IIS `web.config` without `<requestFiltering><fileExtensions><add fileExtension=".map" allowed="false" /></fileExtensions></requestFiltering>`; `//# sourceMappingURL=` comments in the deployed bundles (`grep -r "sourceMappingURL" dist/`); and a `curl -sI "$PRODUCTION_URL/<bundle>.js.map"` that returns 200. A publicly reachable `.map` is rated in section 8 (Medium).
 
 ## 8. What to Report
 

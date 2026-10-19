@@ -29,7 +29,9 @@ Full stack traces go to the log sink; secrets, tokens or PII inside the logged m
 - ✅ Proper HTTP status codes (400, 401, 403, 404, 500)
 - ✅ Structured responses (ProblemDetails format)
 
-**Look for dangerous patterns:** `exception.ToString()`, `exception.Message`, `exception.StackTrace` in responses. Domain exceptions such as `NotFoundException`/`ValidationException` whose message is written for the client are not findings; only `Message` from non-domain exceptions (`SqlException`, `IOException`, `HttpRequestException`, plain `Exception`) counts.
+**Look for dangerous patterns:** `exception.ToString()`, `exception.Message`, `exception.StackTrace` in responses, including `Problem(detail: ex.Message)`, `Results.Problem(ex.Message)` and `ValidationProblem` writers that echo raw exception text (Medium). Domain exceptions such as `NotFoundException`/`ValidationException` whose message is written for the client are not findings; only `Message` from non-domain exceptions (`SqlException`, `IOException`, `HttpRequestException`, plain `Exception`) counts.
+
+**Fail-open catch blocks (A10 covers fail-open as well as disclosure):** empty `catch { }`, `catch (Exception) { return true; }` or `return Ok()` inside authorization handlers (`AuthorizationHandler<T>`), validators or payment code. Search `catch\s*(\(\w*\))?\s*\{\s*\}` and `catch[^}]*return (true|Ok\()`. Fail-open in an authorization or validation path = High.
 
 ## 3. Environment-Specific Behavior
 **Verify:**
@@ -38,6 +40,7 @@ Full stack traces go to the log sink; secrets, tokens or PII inside the logged m
 - Configuration-driven: `UseDeveloperExceptionPage()` properly gated behind `app.Environment.IsDevelopment()` (on .NET 8+ the `WebApplication` template adds it automatically in Development)
 - No `#if DEBUG` and no string compares against `"Development"`/`"Production"`; use `IHostEnvironment.IsDevelopment()`/`IsEnvironment(...)`
 - IIS / App Service layer (`web.config`, `web.release.config`, release-pipeline variables): `<customErrors mode="Off">` (legacy), `<httpErrors errorMode="Detailed">` or `existingResponse="PassThrough"` while detailed errors are on, `ASPNETCORE_DETAILEDERRORS=true` or `ASPNETCORE_ENVIRONMENT=Development` in `<environmentVariables>` or pipeline variables = High (detailed errors reachable in production); `stdoutLogEnabled="true"` with `stdoutLogFile` under `wwwroot` or another served path = Medium
+- ProblemDetails libraries: Hellang.Middleware.ProblemDetails `IncludeExceptionDetails = (ctx, ex) => true` (or not gated on `IsDevelopment()`), `ProblemDetailsOptions.CustomizeProblemDetails` copying `ex.ToString()`/`ex.Message` into `Detail` = High when unconditional in production
 
 ## 4. Response Format Security
 **Secure response example:**
@@ -65,9 +68,10 @@ For each area, provide:
   - No global exception handler (`UseExceptionHandler`/`IExceptionHandler`/exception filter) — High
   - Unhandled exceptions not logged (including the .NET 10 `TryHandleAsync` case above) — High
   - Handler that swallows the exception without logging it — Medium
-  - `exception.Message` from a non-domain exception in a response — Medium
+  - `exception.Message` from a non-domain exception in a response, including `Problem(detail: ex.Message)`/`Results.Problem(ex.Message)` — Medium
+  - Fail-open catch block in an authorization or validation path — High
   - `UseDeveloperExceptionPage()` not gated, or environment detected via `#if DEBUG`/string compares — Medium
-  - Detailed errors enabled at the IIS/App Service layer (`customErrors`/`httpErrors`/`ASPNETCORE_DETAILEDERRORS`/`ASPNETCORE_ENVIRONMENT=Development` in production) — High; `stdoutLogEnabled="true"` writing under `wwwroot` — Medium
+  - Detailed errors enabled at the IIS/App Service layer (`customErrors`/`httpErrors`/`ASPNETCORE_DETAILEDERRORS`/`ASPNETCORE_ENVIRONMENT=Development` in production) or an unconditional `IncludeExceptionDetails`/`CustomizeProblemDetails` copying exception text — High; `stdoutLogEnabled="true"` writing under `wwwroot` — Medium
   - Domain exceptions (`NotFoundException`, `ValidationException`, ...) surfacing their message — not a finding
 - Specific vulnerabilities with file locations
 - Examples of problematic error responses

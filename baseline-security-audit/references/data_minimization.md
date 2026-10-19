@@ -54,6 +54,8 @@ export\s+interface\s+\w*(User|Account|Profile|Customer)\w*
 (passwordHash|password|salt|secret|token|bsn|ssn|iban|creditCard|internalNotes)\s*\??:   // sensitive property in a frontend type
 ```
 
+**Angular state:** NgRx or signal stores (`createFeature`, `signalStore`, `patchState`) and services that keep the full user or customer object where the templates use two fields = Low; `console.log` of API responses carrying personal data = Medium (tokens in `console.log` are check 5 (logging.md)); HTTP interceptors or `shareReplay` caches holding responses with personal data = Low.
+
 ## 3. Cross-Reference Analysis
 
 **For each API endpoint, verify:**
@@ -236,6 +238,10 @@ public string SearchHistory { get; set; }
 public string PurchaseHistory { get; set; }
 public string LastLoginLocation { get; set; }
 ```
+
+**Uncontrolled PII sinks:** free-text columns (`Notes`, `Comments`, `Description`, `Remarks`), JSON columns (`nvarchar(max)` holding serialised objects, `OwnsOne(...).ToJson()`) and file-upload columns (`byte[]`, `varbinary(max)`, blob references for ID scans) can hold personal data outside the modelled fields. Present without a retention or classification rule = Medium.
+
+**Entra ID attribute duplication:** when sign-in is delegated to Entra ID, copying profile attributes (phone, address, date of birth, manager, job title) into the application's user table duplicates data available from the token claims or Microsoft Graph = Medium unless a business need is documented. Search: `GraphServiceClient`, `OnTokenValidated` handlers that persist claims, `User` entities carrying those columns.
 
 ## 9. Questions to Ask for Each Sensitive Field
 
@@ -531,8 +537,8 @@ public class ApplicationDbContext : DbContext
 **Severity** (one rating for both kinds of finding):
 - **Critical**: sensitive field (password hash, token, BSN/SSN, PAN, health data) exposed to unauthenticated callers or to other users; BSN/SSN, PAN, CVV or health data stored without a legal basis or business need
 - **High**: the same sensitive field exposed only to the authenticated owner or to admins; GraphQL or SignalR detailed errors outside Development; other special-category data (GDPR art. 9: race, ethnicity, religion, sexual orientation, biometric) or financial data (bank account, IBAN, salary, credit score) stored without need; BSN/SSN, PAN or health data copied into a secondary store without its own retention and encryption; no purge or erasure path for stored personal data
-- **Medium**: other PII (email, phone, address, date of birth) exposed without a frontend need; OData `$expand` without `MaxExpansionDepth`; ordinary PII (date of birth, full address, phone numbers, gender, marital status, precise location) stored without need, or copied into a secondary store
-- **Low**: non-sensitive over-fetch (unused ordinary fields, full entity in a lookup, legacy fields kept for backward compatibility); non-sensitive data stored without need (age range, city/country, preferences)
+- **Medium**: other PII (email, phone, address, date of birth) exposed without a frontend need; OData `$expand` without `MaxExpansionDepth`; ordinary PII (date of birth, full address, phone numbers, gender, marital status, precise location) stored without need, or copied into a secondary store; free-text, JSON or file-upload columns without a retention or classification rule; Entra ID profile attributes duplicated into the user table; `console.log` of API responses carrying personal data
+- **Low**: non-sensitive over-fetch (unused ordinary fields, full entity in a lookup, legacy fields kept for backward compatibility); non-sensitive data stored without need (age range, city/country, preferences); full user or customer object retained in Angular state or an interceptor cache where two fields are used
 - **Low**: EU Data Act or EU AI Act applicability "verify with the product owner" item (section 13); not a code finding
 - **Not a finding**: ids, foreign keys and `CreatedBy`/`ModifiedBy`, unless they expose another user's PII to non-admins; a stored field assessed JUSTIFIED. QUESTIONABLE or POTENTIALLY JUSTIFIED stored fields are rated one level lower than NOT JUSTIFIED.
 

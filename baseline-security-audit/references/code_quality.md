@@ -82,6 +82,8 @@ Report "security analyzers not enabled" as a Medium finding when none of the acc
 - Vulnerability advisories present in restore output but not acted on (rate by the advisory's CVSS band as in check 2, packages.md)
 - `NU1900` or `NU1905` in the restore output: the audit could not run (no vulnerability data source configured), which is itself a Medium finding
 
+**Frontend static analysis:** check that `angular-eslint` is in `package.json` with an `.eslintrc*` or `eslint.config.*` file, that the pipeline runs a lint step (`ng lint` or `npm run lint`), and read the `ng build` output (budget and deprecation warnings) and the `npm audit` output in the build log (rate advisories per check 2, packages.md). No lint step, or lint warnings ignored = Low.
+
 ## 3. SonarQube — Security Ratings (Overall Code)
 
 Navigate to the project in SonarQube or SonarCloud and check the **Overall Code** tab.
@@ -136,7 +138,7 @@ For each security-related build warning or SonarQube security finding, provide:
 - **Rule or warning ID** (e.g. `CA2100`, `S3649`)
 - **File** and line number where available
 - **Description** of the issue
-- **Severity**: High (Blocker or Critical/High Security issue, broken crypto, injection risk) / Medium (Major or Medium Security issue; an unreviewed Security Hotspot with review priority High) / Low (Minor or Low Security issue; an unreviewed Security Hotspot with review priority Medium or Low; a suppressed security warning; a Sonar pipeline task pinned to a deprecated major). Use the hotspot's own review priority, never a flat Medium
+- **Severity**: High (Blocker or Critical/High Security issue, broken crypto, injection risk) / Medium (Major or Medium Security issue; an unreviewed Security Hotspot with review priority High) / Low (Minor or Low Security issue; an unreviewed Security Hotspot with review priority Medium or Low; a suppressed security warning; a Sonar pipeline task pinned to a deprecated major; no frontend lint step or lint warnings ignored). Use the hotspot's own review priority, never a flat Medium
 - **Recommendation**: remediation step or link to SonarQube rule documentation
 
 ### Technical Debt (report separately, low priority)

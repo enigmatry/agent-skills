@@ -98,7 +98,9 @@ services.AddAuthentication()
         options.UsePkce = true;                  // PKCE required
         options.Authority = "https://login.microsoftonline.com/{tenantId}/v2.0";
         options.ClientId = "...";
-        // ClientSecret optional with PKCE; if used, must come from Key Vault
+        // Confidential client (server-side web app): must still authenticate to the token endpoint (RFC 9700);
+        // prefer a certificate or federated credential over ClientSecret (Key Vault if used); PKCE stays on.
+        // Public client (SPA): no secret, PKCE required.
     });
 ```
 
@@ -145,9 +147,11 @@ responseType: 'id_token token'
 // BAD — older MSAL v1 implicit flow configuration
 ```
 
+**Browser token handling:** prefer the BFF pattern (cookie session on the server, no tokens in JavaScript); with MSAL or `oidc-client-ts`/`angular-auth-oidc-client`, keep the cache in `sessionStorage` and rely on refresh-token rotation (Entra SPA refresh tokens expire after 24 hours). Storage-location severity is owned by check 12 (cookie_storage_security.md). Here: `angular-oauth2-oidc`/`angular-auth-oidc-client` with `requireHttps: false` = Medium; `strictDiscoveryDocumentValidation: false` = Low.
+
 **Search for:**
 - `responseType`, `response_type` — must be `"code"` everywhere
-- `UsePkce`, `usePkce`, `pkce` — must be `true` or enabled by default
+- `UsePkce = false` — `OpenIdConnectOptions.UsePkce` defaults to `true`, so only the explicit `false` is a finding (High); absence is not. In Angular, `usePkce`/`pkce` set to `false` or `responseType` not `'code'`
 - `grant_type=password` — ROPC, never acceptable
 - `grant_type=implicit` — never acceptable
 - `AddOpenIdConnect(` registrations with no `ResponseType` assignment; `TokenValidationParameters`, `ValidateAudience`, `ValidateIssuer`, `RequireHttpsMetadata`, `RequiredScope`, `"scp"`, `"roles"` for bearer APIs
@@ -169,11 +173,11 @@ var token = await credential.GetTokenAsync(...);
 var credential = new DefaultAzureCredential();
 
 // GOOD — Client Credentials flow with certificate (not secret)
-services.AddAuthentication()
-    .AddMicrosoftIdentityWebApi(configuration)
-    .EnableTokenAcquisitionToCallDownstreamApi()
-    .AddInMemoryTokenCaches();
-// With certificate-based client assertion, not client secret
+var app = ConfidentialClientApplicationBuilder.Create(clientId)
+    .WithCertificate(cert)
+    .WithAuthority(authority)
+    .Build();
+var result = await app.AcquireTokenForClient(scopes).ExecuteAsync(); // or Microsoft.Identity.Web ITokenAcquisition.GetAccessTokenForAppAsync
 ```
 
 **Workload identity federation (preferred over client secrets for app-to-app and pipeline authentication):** federated identity credentials on the app registration let Azure DevOps service connections (workload identity federation) and GitHub Actions (OIDC via `azure/login`) obtain tokens without any stored secret. Check pipeline YAML and service-connection definitions for secret-based `AzureRM` connections and for `AZURE_CLIENT_SECRET` / `clientSecret` variables. `ClientSecret` used where federation or managed identity is possible = Medium.
@@ -292,5 +296,5 @@ The following settings cannot be verified from source code alone. Ask someone wi
 For each finding, provide:
 - **Location**: file and line number (for code findings) or environment/configuration name (for policy findings)
 - **Issue**: description of the problem
-- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow including an OIDC registration that leaves `ResponseType` at its `id_token` default, ROPC, bearer API with audience/issuer validation disabled or without a scope or role check, Swagger or OpenAPI reachable in any environment other than Development, unrestricted Identity `/register` endpoint in production) / Medium (PKCE missing, non-user accounts using secrets where workload identity federation, certificates or managed identity are possible, policies that only `RequireAuthenticatedUser()`) / Low (token lifetime slightly above threshold, password policy deviating from NIST, Angular guard missing or mismatched, `DefaultAzureCredential` in production code)
+- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow including an OIDC registration that leaves `ResponseType` at its `id_token` default, ROPC, bearer API with audience/issuer validation disabled or without a scope or role check, Swagger or OpenAPI reachable in any environment other than Development, unrestricted Identity `/register` endpoint in production, explicit `UsePkce = false`) / Medium (PKCE disabled in the Angular OIDC client, `requireHttps: false`, non-user accounts using secrets where workload identity federation, certificates or managed identity are possible, policies that only `RequireAuthenticatedUser()`) / Low (token lifetime slightly above threshold, password policy deviating from NIST, Angular guard missing or mismatched, `strictDiscoveryDocumentValidation: false`, `DefaultAzureCredential` in production code)
 - **Recommendation**: the specific configuration change or policy update required
