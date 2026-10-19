@@ -310,8 +310,6 @@ AuthController.cs:
 - DELETE (UsersController, OrdersController)
 - OPTIONS (if CORS is configured - check Startup.cs/Program.cs)
 
-**Non-controller endpoints (an inventory built only from `[Http*]` attributes is incomplete; say so in the report):** add the verbs from Minimal APIs (`MapGet|MapPost|MapPut|MapDelete|MapPatch|MapMethods`, including routes nested under `MapGroup`), `MapHealthChecks` (GET and HEAD), `MapHub` (POST plus the WebSocket upgrade GET), `MapGraphQL` / OData `[EnableQuery]` (POST and GET) and `MapOpenApi` / Swagger (GET).
-
 ### Step 2: Check web.config Verb Whitelist
 
 **Compare web.config against used verbs:**

@@ -410,8 +410,6 @@ export const environment = {
 
 **Prefer eliminating client secrets altogether.** Managed identity for Azure-hosted workloads, federated identity credentials for pipelines and external workloads, and certificates where neither fits remove the secret that would otherwise be committed, reused or rotated. Report `ClientSecret` usage (`AzureAd:ClientSecret`, `ClientSecretCredential`, `.WithClientSecret(`) where managed identity or federated identity is possible as Medium, and recommend a tenant app management policy that blocks `passwordAddition` and caps `passwordLifetime` so no new secrets can be added to the app registrations. Source: https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-app-management-policies
 
-**Apply the same credential-free check to every other credential type (primary check; Medium because the credential exists at all, in addition to any reuse finding):** SQL connection strings with `User Id`/`Password` where `Authentication=Active Directory Default` or `Active Directory Managed Identity` is possible; Storage, Service Bus and Cosmos DB account keys / `SharedAccessKey` connection strings where a `TokenCredential` (managed identity) with `disableLocalAuth: true` on the resource is possible.
-
 **For third-party APIs:**
 1. Request separate API keys per environment from vendors
 2. Use environment-specific accounts/tenants where available
