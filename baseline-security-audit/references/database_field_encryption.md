@@ -59,18 +59,13 @@ Always Encrypted performs column-level encryption entirely within the database d
 }
 ```
 
-**Check Entity Framework configuration:**
-```csharp
-// GOOD — column marked for Always Encrypted
-modelBuilder.Entity<Customer>()
-    .Property(c => c.SocialSecurityNumber)
-    .HasColumnType("nvarchar(256)");
-// Always Encrypted is enforced at driver level; verify via SSMS column master key setup
-```
+**Always Encrypted is declared in T-SQL, not through EF column types** (`HasColumnType` says nothing about encryption). Search migrations, `*.sql` scripts and DACPAC projects for:
+- `ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = ...)` on the column definition (often inside `migrationBuilder.Sql(...)`); the column master and encryption keys themselves are created outside source control
+- The `Microsoft.Data.SqlClient.AlwaysEncrypted.AzureKeyVaultProvider` package and `SqlConnection.RegisterColumnEncryptionKeyStoreProviders(...)` at startup when the column master key lives in Key Vault
+- `Column Encryption Setting=Enabled` in the connection string (above); without it the driver returns ciphertext and the application breaks, so its presence is a strong signal that encryption is in use
 
 **RED FLAGS:**
 - Sensitive columns present in the database schema but `Column Encryption Setting` is absent from all connection strings
-- No column master key or column encryption key objects configured in the database
 - Sensitive fields stored as plain `nvarchar` or `varchar` without any encryption wrapper
 
 ## 3. Application-Level Encryption (EF Core Value Converters)
@@ -155,20 +150,18 @@ Transparent Data Encryption encrypts the entire database at rest — data files,
 **Only search for evidence of TDE being turned off:**
 
 ```bicep
-// RED FLAG — TDE explicitly disabled in Bicep
-resource sqlDb 'Microsoft.Sql/servers/databases@2021-11-01' = {
-  properties: {
-    transparentDataEncryption: {
-      state: 'Disabled'  // flag this; absence of this block is fine (defaults to Enabled)
-    }
-  }
+// RED FLAG — TDE explicitly disabled in Bicep (child resource of the database, always named 'current')
+resource tde 'Microsoft.Sql/servers/databases/transparentDataEncryption@2021-11-01' = {
+  parent: sqlDb
+  name: 'current'
+  properties: { state: 'Disabled' }  // flag this; absence of the resource is fine (defaults to Enabled)
 }
 ```
 
 **Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`. Look only at the folder or module that corresponds to the project currently being audited (ask the user for the project/folder name if unclear). Check there for Azure SQL database definitions.
 
 **Search for:**
-- `state: 'Disabled'` near `transparentDataEncryption` in Bicep files
+- `state: 'Disabled'` in a `Microsoft.Sql/servers/databases/transparentDataEncryption` resource (or an inline `transparentDataEncryption` property in older templates) in Bicep files
 - `az sql db tde set --status Disabled` in Azure CLI scripts or pipeline YAML
 - If neither is found, TDE is enabled — no finding needed
 

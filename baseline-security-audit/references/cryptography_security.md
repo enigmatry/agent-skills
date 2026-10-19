@@ -18,14 +18,15 @@ Analyze the codebase to identify weak or insecure cryptographic implementations 
 ```csharp
 services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
-// Default uses PBKDF2 with HMAC-SHA256, 100,000 iterations (secure)
+// Default (PasswordHasher V3): PBKDF2-HMAC-SHA512, 128-bit salt, 256-bit subkey, 100,000 iterations
+// (PasswordHasherOptions.IterationCount). The framework default is acceptable; do not flag it.
 ```
 
 **GOOD - Custom implementations:**
 ```csharp
-// PBKDF2
-KeyDerivation.Pbkdf2(password, salt, KeyDerivationPrf.HMACSHA256, 
-    iterationCount: 100000, numBytesRequested: 32);
+// PBKDF2 (custom code: 600,000+ iterations with SHA-256, 210,000+ with SHA-512)
+KeyDerivation.Pbkdf2(password, salt, KeyDerivationPrf.HMACSHA512,
+    iterationCount: 210_000, numBytesRequested: 32);
 
 // BCrypt
 BCrypt.HashPassword(password, workFactor: 12);
@@ -41,7 +42,7 @@ SHA1.Create().ComputeHash(...)          // Broken
 SHA256.Create().ComputeHash(...)        // Too fast, no salt
 ```
 
-**Severity:** MD5 or SHA-1 for passwords = Critical; unsalted or un-iterated SHA-2, or PBKDF2 below 100,000 iterations = High. See check 19 (authentication_security.md) for password policy.
+**Severity:** MD5 or SHA-1 for passwords = Critical; unsalted or un-iterated SHA-2 = High; custom `KeyDerivation.Pbkdf2` / `Rfc2898DeriveBytes.Pbkdf2` below 600,000 iterations (SHA-256) or 210,000 (SHA-512) = High (OWASP Password Storage Cheat Sheet); the Identity default above is not a finding. See check 19 (authentication_security.md) for password policy.
 
 ## 2. General Data Hashing
 
@@ -207,8 +208,8 @@ CryptoJS.PBKDF2(password, salt)          // HIGH before 4.2.0: SHA-1 with 1 iter
 
 **Severity:**
 - **Critical**: MD5/SHA-1 for passwords; DES or RC2; ECB protecting secrets or PII; hard-coded or static key; home-made cipher or hash protecting secrets
-- **High**: TripleDES; unsalted or low-iteration SHA-2 for passwords; unauthenticated CBC handed to clients; zero or static IV; `Random`/`Guid` for a secret; `CryptoJS.AES.encrypt` passphrase mode; `CryptoJS.PBKDF2` before 4.2.0
-- **Medium**: MD5/SHA-1 for non-security integrity checks; discontinued `crypto-js` dependency; unreviewed `weak-cryptography` hotspots
+- **High**: TripleDES; unsalted or low-iteration SHA-2 for passwords; custom PBKDF2 below 600,000 (SHA-256) / 210,000 (SHA-512) iterations; `PasswordDeriveBytes` or the SHA-1/1000-iteration `Rfc2898DeriveBytes` constructor for passwords; unauthenticated CBC handed to clients; zero or static IV; `Random`/`Guid` for a secret; `CryptoJS.AES.encrypt` passphrase mode; `CryptoJS.PBKDF2` before 4.2.0
+- **Medium**: MD5/SHA-1 for non-security integrity checks; obsolete .NET crypto APIs (SYSLIB0021/0022/0023/0033/0041/0045/0053: `Rijndael*`, `*CryptoServiceProvider`, `*Managed`, `RNGCryptoServiceProvider`, `HashAlgorithm.Create(string)`, `AesGcm(key)` without a tag size); discontinued `crypto-js` dependency; unreviewed `weak-cryptography` hotspots
 - **Low**: key sizes above the minimum but below the recommendation (AES-128, RSA-2048); key without documented rotation; crypto-agility inventory (RSA/ECDSA/ECDH usage with no post-quantum migration plan — informational)
 
 ### Password hashing findings:
@@ -297,6 +298,10 @@ CipherMode\.ECB
 // Hardcoded keys (review carefully)
 new byte\[\]\s*\{.*\}.*[Kk]ey
 
+// Obsolete .NET crypto APIs (SYSLIB0021/0022/0023/0033/0041/0045/0053) — Medium; High for PasswordDeriveBytes or new Rfc2898DeriveBytes(...) without HashAlgorithmName (SHA-1, 1000 iterations) used for passwords
+\bRijndael(Managed)?\b|\w+CryptoServiceProvider\b|\b(SHA(1|256|384|512)|Aes)Managed\b|RNGCryptoServiceProvider
+new Rfc2898DeriveBytes\(|PasswordDeriveBytes|HashAlgorithm\.Create\(\s*"|new AesGcm\(\s*\w+\s*\)
+
 // Crypto-agility inventory (informational, Low — see section 5)
 RSA\.Create|ECDsa\.Create|ECDiffieHellman\.Create|RS256|ES256
 ```
@@ -312,7 +317,7 @@ RSA\.Create|ECDsa\.Create|ECDiffieHellman\.Create|RS256|ES256
 1. ✅ **Argon2** (best)
 2. ✅ **BCrypt** (good, work factor 12+)
 3. ✅ **scrypt** (good)
-4. ✅ **PBKDF2** (acceptable, 100,000+ iterations)
+4. ✅ **PBKDF2** (acceptable: the Identity default, or 600,000+ SHA-256 / 210,000+ SHA-512 iterations in custom code)
 5. ❌ **MD5, SHA-1, SHA-256 without salt** (never)
 
 **Data Hashing:**
@@ -341,7 +346,7 @@ RSA\.Create|ECDsa\.Create|ECDiffieHellman\.Create|RS256|ES256
 
 ✅ **Password security:**
 - Using ASP.NET Core Identity default or BCrypt/Argon2
-- Minimum 100,000 iterations for PBKDF2
+- PBKDF2: Identity default, or 600,000+ (SHA-256) / 210,000+ (SHA-512) iterations in custom code
 - Unique salt per password
 
 ✅ **Data hashing:**

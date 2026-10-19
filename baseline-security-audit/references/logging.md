@@ -77,6 +77,10 @@ Audit records MUST contain the acting user's id, UPN or email as the actor, toge
 - Domain events or audit event handlers
 - Dedicated audit logging categories or contexts
 
+**Alerting (OWASP A09 is "Logging and Alerting Failures"):** look for Azure Monitor alert rules (`Microsoft.Insights/scheduledQueryRules` or `metricAlerts` in Bicep, `az monitor` in pipelines) or Sentinel analytics rules covering failed-login bursts, 5xx spikes and audit-log silence (no audit events for N hours), and for log-shipping health (diagnostic settings or agent heartbeat). No alerting on security events, found in code or confirmed by the user = High.
+
+**Audit log integrity and retention:** the audit sink must be append-only or immutable (Log Analytics table retention, immutable/WORM blob container, a table the app identity can only `INSERT` into), access to logs restricted (RBAC on the workspace or storage account) and a retention period defined (Bicep `retentionInDays`, Serilog `retainedFileCountLimit`). Serilog audit events go through `AuditTo` (fails loudly) rather than `WriteTo`; a shared file sink the app identity can rewrite is not an audit log. Missing integrity or retention evidence = Medium; audit events writable or deletable by the application identity = High.
+
 ## 4. Sensitive Data in Logs
 
 Scan the codebase for sensitive data being written to logs, which could expose credentials, PII, or other confidential information through log files and aggregation systems.
@@ -166,6 +170,8 @@ HttpLoggingFields\.(All|RequestBody|ResponseBody|RequestQuery)
 LogContext\.PushProperty\(                           // sensitive value pushed into the log scope
 System\.Debug\s*[:=]\s*true                          // Azure DevOps diagnostic mode
 console\.(log|debug|info)\([^)]*(token|password|Authorization)
+scheduledQueryRules|metricAlerts|actionGroups|SecurityInsights   // alert rules (section 3); none = High
+AuditTo\.|WriteTo\.File\([^)]*[Aa]udit|retentionInDays|immutab   // audit sink integrity and retention (section 3)
 ```
 
 ## What to Report
@@ -185,6 +191,6 @@ For each sensitive-data finding (section 4), provide:
 
 **Severity** for each gap or finding:
 - **Critical**: credentials, tokens, session ids, BSN/SSN, PAN/CVV in logs
-- **High**: no global exception logging (exceptions reach no sink, or are logged without the exception object); audit events not logged for authentication, authorization or privileged actions; special-category or financial payload in logs; exception messages carrying connection strings or user secrets
-- **Medium**: console the only sink in production, or `Microsoft.*` / `System.*` categories at `Information` or lower in production; audit events not separated from the application log; email, name or phone logged as payload rather than as the acting user; request or response bodies logged
+- **High**: no global exception logging (exceptions reach no sink, or are logged without the exception object); audit events not logged for authentication, authorization or privileged actions; no alerting on security events; audit events writable or deletable by the application identity; special-category or financial payload in logs; exception messages carrying connection strings or user secrets
+- **Medium**: console the only sink in production, or `Microsoft.*` / `System.*` categories at `Information` or lower in production; audit events not separated from the application log; no evidence of audit-log integrity, access control or retention; email, name or phone logged as payload rather than as the acting user; request or response bodies logged
 - **Low**: missing correlation ids

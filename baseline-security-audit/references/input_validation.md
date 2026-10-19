@@ -178,6 +178,7 @@ public IActionResult Update(UpdateUserDto dto)
 // Or use [Bind] attribute
 public IActionResult Update([Bind("Name,Email")] User user)
 ```
+**Mass assignment / BOPLA (owned here):** in request-bound DTOs and entities (section 8 scope) flag settable `Id`, `OwnerId`, `UserId`, `TenantId`, `Role`/`Roles`, `IsAdmin`, `IsActive`/`IsApproved`, `Price`, `Balance`, `Discount`, `Status` that the caller must not set; `TryUpdateModelAsync(model)` without an include list; AutoMapper `CreateMap<Dto, Entity>()` or `ReverseMap()` that maps those members without `.Ignore()`. High when the field drives authorization, tenancy or money; Medium otherwise.
 
 **Integer Overflow/Underflow:**
 ```csharp
@@ -255,6 +256,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - Model/DTO classes without validation attributes
 - Missing `ModelState.IsValid` checks (when not using `[ApiController]`)
 - net10.0 minimal API projects using DataAnnotations without `AddValidation()`, or `.DisableValidation()` on an endpoint that takes user input (Medium)
+- Mass assignment: a privileged, tenancy or monetary field settable from the request body, `TryUpdateModelAsync` without an include list, or a DTO-to-entity map covering such fields (High when it drives authorization or money, Medium otherwise)
 - File upload endpoints without type/size validation
 - Numeric inputs without range validation
 - Text inputs without length constraints
@@ -329,6 +331,10 @@ public decimal .* \{ get; set; \}
 
 // .NET 10 minimal API validation (opt-in; absence or opt-out is Medium)
 AddValidation\(\)|\.DisableValidation\(\)|\[ValidatableType\]
+
+// Mass assignment — within request-bound types only (section 4)
+public\s+\w+\??\s+(Id|OwnerId|UserId|TenantId|Roles?|IsAdmin|IsActive|IsApproved|Price|Balance|Discount)\s*\{\s*get;\s*(set|init);
+TryUpdateModelAsync(<\w+>)?\(\s*\w+\s*\)|ReverseMap\(\)|CreateMap<\w*(Dto|Request|Command)\w*,\s*\w+>
 
 // Direct user input usage
 Request.Query\[|Request.Form\[|Request.Headers\[
