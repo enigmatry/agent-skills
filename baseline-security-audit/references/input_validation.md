@@ -60,7 +60,6 @@ public class MyValidator : AbstractValidator<MyModel>
 
 // Check for validator registration in DI
 services.AddValidatorsFromAssemblyContaining<MyValidator>();
-services.AddFluentValidationAutoValidation();
 ```
 
 **Flags to raise:**
@@ -148,10 +147,11 @@ CustomValidators
 
 **File uploads:**
 - File type validation (extension and MIME type)
-- File size limits
-- Content validation (not just extension)
+- File size limits: `[RequestSizeLimit]`, `[RequestFormLimits]`, `FormOptions.MultipartBodyLengthLimit`, Kestrel `MaxRequestBodySize`, IIS `maxAllowedContentLength`
+- Content validation (not just extension): file signature (magic bytes) check on the `IFormFile` stream
 - Virus scanning — not a code check: ask the user whether uploads are scanned; do not report it as a finding
-- Filename sanitization (a caller-controlled path reaching the file system is path traversal, owned here)
+- Filename sanitization: `Path.GetFileName` on the supplied name and storage outside the web root (a caller-controlled path reaching the file system is path traversal, owned here, section 4)
+- Upload endpoint with no size limit or an extension-only type check = Medium
 
 **Passwords:** length and composition rules are owned by check 19 (authentication_security.md); hashing by check 13 (cryptography_security.md). Here only check that the password field is bound server-side and has a maximum length.
 
@@ -175,8 +175,10 @@ public IActionResult Update(User user)
 // SAFE - use specific DTO
 public IActionResult Update(UpdateUserDto dto)
 
-// Or use [Bind] attribute
+// [Bind] restricts form and query binding only, not [FromBody] JSON
 public IActionResult Update([Bind("Name,Email")] User user)
+// For APIs: a dedicated request DTO, or reject unknown members (.NET 8+)
+new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow }
 ```
 **Mass assignment / BOPLA (owned here):** in request-bound DTOs and entities (section 8 scope) flag settable `Id`, `OwnerId`, `UserId`, `TenantId`, `Role`/`Roles`, `IsAdmin`, `IsActive`/`IsApproved`, `Price`, `Balance`, `Discount`, `Status` that the caller must not set; `TryUpdateModelAsync(model)` without an include list; AutoMapper `CreateMap<Dto, Entity>()` or `ReverseMap()` that maps those members without `.Ignore()`. High when the field drives authorization, tenancy or money; Medium otherwise.
 
@@ -206,6 +208,12 @@ public string Name { get; set; }
 [RegularExpression(@"^(a+)+$")] // DANGEROUS - catastrophic backtracking
 [RegularExpression(@"^[a-zA-Z0-9]{3,20}$")] // SAFE - simple pattern
 ```
+
+**Unsafe deserialization:** Newtonsoft `TypeNameHandling` other than `None` on untrusted input = High; `BinaryFormatter` (removed in .NET 9) = High; System.Text.Json `MaxDepth` left at its default on large untrusted payloads = Low.
+
+**Path traversal (owned here):** `Path.Combine(root, userInput)` without `Path.GetFullPath` plus a `StartsWith(root)` check, `File.ReadAllText`/`FileStream` on a user-supplied path, `Directory.GetFiles` with user input. Reachable from user input = High.
+
+**SSRF (OWASP 2025 folds it into A01):** server-side `HttpClient`/`WebRequest` calls with a user-supplied URL need a host allow-list, blocking of private and link-local ranges (`169.254.169.254` metadata endpoint) and no redirect following to arbitrary hosts (`AllowAutoRedirect`). User-controlled outbound URL without an allow-list = High.
 
 ## 5. Framework-Specific Validation Checks
 
@@ -257,7 +265,9 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - Missing `ModelState.IsValid` checks (when not using `[ApiController]`)
 - net10.0 minimal API projects using DataAnnotations without `AddValidation()`, or `.DisableValidation()` on an endpoint that takes user input (Medium)
 - Mass assignment: a privileged, tenancy or monetary field settable from the request body, `TryUpdateModelAsync` without an include list, or a DTO-to-entity map covering such fields (High when it drives authorization or money, Medium otherwise)
-- File upload endpoints without type/size validation
+- File upload endpoints without type/size validation: no request size limit or an extension-only type check (Medium)
+- Unsafe deserialization: Newtonsoft `TypeNameHandling` other than `None` or `BinaryFormatter` on untrusted input (High); default `MaxDepth` on large untrusted payloads (Low)
+- Path traversal or SSRF reachable from user input (High)
 - Numeric inputs without range validation
 - Text inputs without length constraints
 - Email/URL inputs without format validation
@@ -339,6 +349,9 @@ TryUpdateModelAsync(<\w+>)?\(\s*\w+\s*\)|ReverseMap\(\)|CreateMap<\w*(Dto|Reques
 // Direct user input usage
 Request.Query\[|Request.Form\[|Request.Headers\[
 HttpContext.Request
+
+// Unsafe deserialization, path traversal, SSRF (section 4)
+TypeNameHandling\.(All|Auto|Objects|Arrays)|BinaryFormatter|Path\.Combine\(|Directory\.GetFiles\(|File\.ReadAll|new HttpClient\(|GetAsync\(\s*\w*(url|uri)
 ```
 
 **Check these file types:**

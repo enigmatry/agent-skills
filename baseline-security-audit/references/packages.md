@@ -10,8 +10,8 @@ Scan the codebase for packages with known security vulnerabilities, deprecated p
 
 ## 1. Package Management Systems Analysis
 **Check all package files:**
-- **NuGet packages**: `*.csproj`, `Directory.Packages.props`, `Directory.Build.props`, `nuget.config` (package sources); `packages.config` is legacy (.NET Framework), not expected on this stack
-- **npm packages**: `package.json`, `package-lock.json`, `yarn.lock`, `.npmrc` (registry)
+- **NuGet packages**: `*.csproj`, `Directory.Packages.props`, `Directory.Build.props`, `nuget.config` (package sources), `packages.lock.json` (`<RestorePackagesWithLockFile>`; CI must restore with `RestoreLockedMode=true`, otherwise Low), `global.json` (SDK pin); `packages.config` marks a legacy non-SDK project where NuGetAudit does not apply
+- **npm packages**: `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `.npmrc` (registry)
 
 **Search for:**
 - Package version specifications with explicit versions
@@ -156,7 +156,7 @@ Use the NVD CVSS severity bands as reported by the advisory; do not shift them u
 
 **Low (monitor):**
 - CVSS 0.1–3.9
-- `NuGetAuditSuppress` without a justification comment; private feed without `<packageSourceMapping>`; no `min-release-age`; no `npm audit signatures` (section 5)
+- `NuGetAuditSuppress` without a justification comment; private feed without `<packageSourceMapping>`; no `min-release-age`; no `npm audit signatures` (section 5); `packages.lock.json` committed but CI restores without `RestoreLockedMode=true` (section 1)
 
 Not findings: minor or patch updates available, pre-release versions available, documentation-only or feature-only updates, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
 

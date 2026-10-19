@@ -42,6 +42,7 @@ Search for query parameters that carry:
 - URLs constructed with string concatenation including sensitive data
 - Query parameters named `?password=`, `?token=`, `?secret=`, or `?key=`
   A password-reset link with `?token=` is the OWASP-recommended pattern; the finding there is a token that is not single-use or does not expire, or a reset page that loads third-party resources without `Referrer-Policy: no-referrer`
+- Outbound credentials in URLs built by the application: `?apikey=`/`?key=` to third parties, webhook URLs that embed tokens, `UriBuilder` or string interpolation putting a secret into an `HttpClient` request URL, Azure DevOps URLs carrying a PAT. Secret in an outbound URL = High (it lands in the third party's and every proxy's logs); send it in an `Authorization` header instead
 - Redirect URLs containing sensitive information
 - Debug or diagnostic URLs exposing internal state
 - Search parameters that leak private data
@@ -61,6 +62,7 @@ Search for query parameters that carry:
 - GET requests that should use POST for sensitive operations
 - Angular reactive forms submitted with `HttpClient.get` and form values as params (legacy Razor `method="GET"` forms are not expected on this stack)
 - Links or redirects that expose sensitive data via referrer headers
+- Token-bearing pages (reset, invitation, magic link): the token leaks through the `Referer` header to every third-party resource the page loads and through `window.opener` from links it opens. Require `Referrer-Policy: no-referrer` on such pages (the header itself is check 14 (security_headers.md)) and `rel="noopener noreferrer"` on outbound `target="_blank"` links; search `target="_blank"` without `rel=`. Token-bearing page loading third-party resources without `no-referrer` = Medium
 - Bookmarkable or shareable URLs containing private information
 
 ## 7. Logging and Monitoring Risks
@@ -96,5 +98,5 @@ For each finding, provide:
 - **File** and line number
 - **Code snippet** showing the URL or query string construction
 - **Data type** being exposed (credential, PII, etc.)
-- **Severity**: High (bearer or API tokens, passwords, session ids or SAS signatures in URLs built by the application) / Medium (PII such as email, BSN or date of birth in query strings; OpenTelemetry URL-query redaction switched off) / Low (everything else, e.g. internal identifiers with limited exposure). Opaque or REST path ids are not findings
+- **Severity**: High (bearer or API tokens, passwords, session ids or SAS signatures in URLs built by the application, including outbound calls and webhook URLs) / Medium (PII such as email, BSN or date of birth in query strings; OpenTelemetry URL-query redaction switched off; token-bearing page loading third-party resources without `Referrer-Policy: no-referrer`) / Low (everything else, e.g. internal identifiers with limited exposure). Opaque or REST path ids are not findings
 - **Recommendation**: use POST body, request headers, or server-side session storage instead

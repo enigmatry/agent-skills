@@ -145,7 +145,7 @@ Report missing key-rotation evidence for the column-encryption key as Low; hard-
 
 ## 6. Transparent Data Encryption (TDE)
 
-Transparent Data Encryption encrypts the entire database at rest — data files, log files, and backups — protecting against exposure from physical media theft or file-level access. **TDE is enabled by default on Azure SQL and requires no configuration. Only flag this if it has been explicitly disabled.**
+Transparent Data Encryption encrypts the entire database at rest — data files, log files, and backups — protecting against exposure from physical media theft or file-level access. **TDE is on by default for Azure SQL Database and for Managed Instance databases created after February 2019; flag those only when it has been explicitly disabled. SQL Server on VMs or on-premises is not encrypted by default: require `sys.dm_database_encryption_keys` evidence or `ALTER DATABASE ... SET ENCRYPTION ON` in scripts, otherwise report TDE not enabled = High.**
 
 **Only search for evidence of TDE being turned off:**
 
@@ -163,7 +163,7 @@ resource tde 'Microsoft.Sql/servers/databases/transparentDataEncryption@2021-11-
 **Search for:**
 - `state: 'Disabled'` in a `Microsoft.Sql/servers/databases/transparentDataEncryption` resource (or an inline `transparentDataEncryption` property in older templates) in Bicep files
 - `az sql db tde set --status Disabled` in Azure CLI scripts or pipeline YAML
-- If neither is found, TDE is enabled — no finding needed
+- If neither is found on Azure SQL Database or Managed Instance, TDE is enabled — no finding needed; for SQL Server on a VM or on-premises search `SET ENCRYPTION ON` and `dm_database_encryption_keys` instead
 
 **Note:** TDE protects data at the file level only. It does not prevent a user with valid database credentials from reading sensitive column values — column-level encryption (sections 2–3) is still required for fields such as SSN and credit card numbers.
 
@@ -173,5 +173,5 @@ For each finding, provide:
 - **Entity/table** and **field/column** name (for column-level findings), or **infrastructure file** and line number (for TDE findings)
 - **Data type**: SSN, credit card, IBAN, biometric, medical record, TDE configuration, etc.
 - **Current state**: plain text, application-encrypted, column-encrypted (Always Encrypted), or TDE disabled
-- **Severity** (by data class of an unencrypted column): Critical (CVV/CVC or full track data stored at all; full PAN stored in clear) / High (BSN/SSN, bank account, IBAN, biometric or health data unencrypted; TDE explicitly disabled) / Medium (other PII unencrypted) / Low (no key rotation evidence for the column-encryption key). A hard-coded or static key is reported under check 13 (cryptography_security.md), not here.
+- **Severity** (by data class of an unencrypted column): Critical (CVV/CVC or full track data stored at all; full PAN stored in clear) / High (BSN/SSN, bank account, IBAN, biometric or health data unencrypted; TDE explicitly disabled, or not enabled on SQL Server on a VM or on-premises) / Medium (other PII unencrypted) / Low (no key rotation evidence for the column-encryption key). A hard-coded or static key is reported under check 13 (cryptography_security.md), not here.
 - **Recommendation**: preferred approach (Always Encrypted, EF Core value converter, or Data Protection API for column-level; ensure TDE is enabled for database-level) and any key management improvements required

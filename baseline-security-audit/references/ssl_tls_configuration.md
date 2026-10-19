@@ -62,6 +62,8 @@ TLS 1.1 (High - Deprecated in 2020, PCI DSS non-compliant)
 - TLS 1.0/1.1 enabled → **Grade capped at B**
 - Only TLS 1.2/1.3 → **Grade: A possible**
 
+**HTTP to HTTPS enforcement:** besides App Service `httpsOnly` (section 9), look for `app.UseHttpsRedirection()` with `AddHsts` / `UseHsts` in `Program.cs`, `[RequireHttps]` on legacy MVC controllers, and on `iis` the native `<hsts redirectHttpToHttps="true">` element or a URL Rewrite rule redirecting to `https://{HTTP_HOST}{REQUEST_URI}`. No application-level or platform-level redirect = Medium. HSTS header values are rated in check 14 (security_headers.md).
+
 ## 3. Cipher Suite Security
 
 **REQUIRED - Strong cipher suites only**
@@ -214,24 +216,15 @@ Sweet32 (3DES) - 3DES must be disabled
 
 **Target Grade: A or A+**
 
-**Grade A+ requirements:**
-- Grade A base score
-- HSTS with max-age ≥ 6 months
-- HSTS includes all subdomains
-- No cipher suite weaknesses
+**How SSL Labs grades** (an overall score with caps, not category percentages):
+- Overall score 80 or more → A
+- A+ → grade A plus HSTS with `max-age` of at least six months and no warnings
+- TLS 1.0 or 1.1 enabled → capped at B
+- No TLS 1.3 → capped at A-
+- HSTS missing or invalid → capped at A-
+- RC4, SSL 3.0 or an untrusted certificate → F or T
 
-**Grade A requirements:**
-- Certificate: 100% score (trusted, valid, strong)
-- Protocol Support: 95%+ (TLS 1.2+, no weak protocols)
-- Key Exchange: 90%+ (strong key sizes, PFS)
-- Cipher Strength: 90%+ (strong ciphers only)
-
-**Grade downgrades:**
-- TLS 1.0/1.1 support → Capped at B
-- Weak ciphers enabled → C or lower
-- Known vulnerabilities → May result in F
-- Certificate issues → May result in F
-- SSL 2.0/3.0 enabled → Automatic F
+Source: https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide
 
 ## 9. Azure App Service TLS Configuration (Infrastructure Code)
 
@@ -285,6 +278,7 @@ ServerCertificateCustomValidationCallback
 DangerousAcceptAnyServerCertificateValidator
 ServerCertificateValidationCallback\s*=
 RemoteCertificateValidationCallback
+(UseHttpsRedirection|RequireHttps|AddHsts|redirectHttpToHttps)
 ```
 
 | Finding | Severity |
@@ -375,6 +369,7 @@ OCSP Stapling: ✅ Enabled / ❌ Disabled
 - Missing OCSP stapling (only when the certificate has an OCSP URL)
 - No TLS 1.3 support (SSL Labs caps the grade at A-)
 - Certificate issued after 15 March 2026 with validity > 200 days
+- No HTTP to HTTPS redirect at application or platform level (see section 2)
 
 **Low (Best Practice):**
 - ECDSA P-256/P-384 certificates (smaller handshakes; RSA key size above 2048 is not a finding either way)
