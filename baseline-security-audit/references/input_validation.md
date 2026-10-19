@@ -60,9 +60,7 @@ public class MyValidator : AbstractValidator<MyModel>
 
 // Check for validator registration in DI
 services.AddValidatorsFromAssemblyContaining<MyValidator>();
-services.AddFluentValidationAutoValidation(); // SharpGrip.FluentValidation.AutoValidation.*; the FluentValidation.AspNetCore variant is unsupported
 ```
-**Auto-validation package:** `FluentValidation.AspNetCore` auto-validation is no longer supported by the maintainers; current options are `SharpGrip.FluentValidation.AutoValidation.*`, injecting `IValidator<T>` by hand, or an endpoint filter. A project using one of those is not "validator not registered"; the old package still referenced = Low.
 
 **Flags to raise:**
 - Actions on controllers **without** `[ApiController]` that accept user input and have no `ModelState.IsValid` check or FluentValidation auto-validation (`[ApiController]` returns 400 automatically on invalid `ModelState`; do not flag those)
@@ -268,7 +266,6 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - net10.0 minimal API projects using DataAnnotations without `AddValidation()`, or `.DisableValidation()` on an endpoint that takes user input (Medium)
 - Mass assignment: a privileged, tenancy or monetary field settable from the request body, `TryUpdateModelAsync` without an include list, or a DTO-to-entity map covering such fields (High when it drives authorization or money, Medium otherwise)
 - File upload endpoints without type/size validation: no request size limit or an extension-only type check (Medium)
-- `FluentValidation.AspNetCore` auto-validation package still referenced (Low)
 - Unsafe deserialization: Newtonsoft `TypeNameHandling` other than `None` or `BinaryFormatter` on untrusted input (High); default `MaxDepth` on large untrusted payloads (Low)
 - Path traversal or SSRF reachable from user input (High)
 - Numeric inputs without range validation
