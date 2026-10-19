@@ -53,6 +53,8 @@ return await context.Orders.Where(o => ids.Contains(o.Id)).ToListAsync();
 
 - **ASP.NET Core**: Missing resource-based authorization policies (`IAuthorizationService.AuthorizeAsync(user, resource, policy)`, `IAuthorizationHandler<TRequirement, TResource>`)
 - **Entity Framework**: Direct `context` access without a user-scoped filter
+- **EF Core global query filters**: `HasQueryFilter(e => e.TenantId == _tenantId)` (named filters in EF Core 10) is the expected tenant-scoping mechanism; `IgnoreQueryFilters()` on a request path = High unless the caller is scoped another way (background jobs and admin tooling with their own scoping are not findings)
+- **Identity source**: a user or tenant id taken from the request (`dto.UserId`, `?userId=`, an `X-Tenant-Id` header, a route value) instead of from claims (`User.FindFirst("oid"|"sub")`, `ClaimTypes.NameIdentifier`, a tenant claim) = High. Search: `HasQueryFilter`, `IgnoreQueryFilters`, `Headers\["X-Tenant`, `\.(UserId|TenantId)\s*=\s*(dto|request|model|command)\.`
 - **Repository patterns**: Generic repositories lacking built-in ownership enforcement
 - **Service layer**: Business logic that does not validate resource ownership before returning data
 
@@ -70,5 +72,5 @@ For each finding, provide:
 - **File** and line number
 - **Endpoint or method** where the unchecked access occurs
 - **ID parameter** used (route, query string, or body)
-- **Risk**: Critical (resource reachable without authentication, or cross-tenant access to sensitive data from low-privilege input) / High (another user's or tenant's data accessible to an authenticated caller without an ownership check, including admin endpoints that do not scope to the admin's tenant — cross-tenant or cross-user access is never below High) / Medium (ownership check present but with gaps that need another weakness to exploit) / Low (internal identifiers exposed but every access path is scoped; hygiene only)
+- **Risk**: Critical (resource reachable without authentication, or cross-tenant access to sensitive data from low-privilege input) / High (another user's or tenant's data accessible to an authenticated caller without an ownership check, including admin endpoints that do not scope to the admin's tenant, `IgnoreQueryFilters()` on a request path, or a user/tenant id trusted from the request instead of from claims — cross-tenant or cross-user access is never below High) / Medium (ownership check present but with gaps that need another weakness to exploit) / Low (internal identifiers exposed but every access path is scoped; hygiene only)
 - **Recommendation**: resource-based authorization check or ownership filter to apply

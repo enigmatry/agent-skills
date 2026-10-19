@@ -31,6 +31,7 @@ return\s+(await\s+)?_?(db|context|dbContext)\.\w+\.(FirstOrDefault|Single|Find)
 \[JsonIgnore\]                                         // on an entity class: the entity is being serialised directly
 ReverseMap\(\)                                         // AutoMapper two-way map: entity <-> DTO with every field
 ProjectTo<\w*(Entity|User)\w*>|Map<\w*Entity\w*>
+IncludeExceptionDetails|ExposeExceptionDetails|EnableDetailedErrors|EnableQueryFeatures|\.Expand\(\)|MaxExpansionDepth   // section 4, error and protocol payloads
 ```
 
 ## 2. Frontend Data Consumption Mapping
@@ -60,6 +61,8 @@ export\s+interface\s+\w*(User|Account|Profile|Customer)\w*
 - ⚠️ **QUESTIONABLE**: Fields returned but usage unclear/minimal
 - ❌ **EXCESSIVE**: Fields returned but never used in UI
 
+**Scope of the "used in the frontend" test (sections 1–3):** it applies to private BFF-style endpoints consumed only by this Angular app. For a shared or public API with other consumers (mobile apps, partners, an API product) the test is "no sensitive field exposed without need": unused ordinary fields are not findings there, sensitive fields keep the section 6 ratings.
+
 **Critical security fields to check:**
 - User IDs, email addresses, phone numbers
 - Internal system identifiers
@@ -85,6 +88,8 @@ return users.Select(u => new { u.Id, u.Name, u.Email });
 ```
 
 See check 9 (input_validation.md) for inbound over-posting.
+
+**Error and protocol payloads:** stack traces or `ex.Message` in `ProblemDetails` are owned by check 4 (exception_handling.md); logged request/response bodies (`AddHttpLogging`) by check 5 (logging.md). Owned here: GraphQL exception details (Hot Chocolate `IncludeExceptionDetails`, GraphQL.NET `ExposeExceptionDetails`) and SignalR `EnableDetailedErrors = true` outside Development = High; OData `$expand`/`$select` enabled on navigation properties (`.Expand()`, `EnableQueryFeatures()`) without `MaxExpansionDepth`/`SetMaxTop` so a client can pull whole object graphs = Medium (High when the graph reaches other users' PII).
 
 **Frontend over-consumption patterns:**
 ```typescript
@@ -153,6 +158,8 @@ public class UserProfile { }
 public class Account { }
 public class Member { }
 ```
+
+**PII in secondary stores (rated as if stored unencrypted in the primary table):** audit tables with before/after JSON blobs (`OldValues`/`NewValues`, Audit.NET, `SaveChangesInterceptor`), outbox or event tables, Application Insights custom dimensions (`TrackEvent`/`TelemetryClient` properties), blob uploads (ID scans, contracts), search indexes (Azure AI Search, Elasticsearch), Redis / `IDistributedCache`, Service Bus or Event Grid messages. Search: `AuditLog|OutboxMessage|TrackEvent|TelemetryClient|SearchClient|IDistributedCache|ServiceBusMessage|BlobClient\.Upload`. A copy of BSN/SSN, PAN or health data in any of these without its own retention and encryption = High; other PII = Medium.
 
 ## 8. Sensitive Data Fields to Identify
 
@@ -254,6 +261,7 @@ public string LastLoginLocation { get; set; }
    - How long is this data kept?
    - Is there a deletion policy in place?
    - Can it be automatically purged after a certain period?
+   - Evidence to look for: a scheduled purge (`IHostedService`/`BackgroundService`, Hangfire `RecurringJob`, Quartz, a timer-triggered Azure Function) that deletes or anonymises personal data, a right-to-erasure path (`DeleteUser`, `Anonymi[sz]e`, `Erase`), and defined backup and log retention. Soft-delete (`IsDeleted`, `DeletedAt`, a global query filter) that keeps the PII rows forever counts as no deletion. No purge or erasure path for stored personal data = High.
 
 ## 10. Common Unnecessary Data Examples
 
@@ -522,8 +530,8 @@ public class ApplicationDbContext : DbContext
 
 **Severity** (one rating for both kinds of finding):
 - **Critical**: sensitive field (password hash, token, BSN/SSN, PAN, health data) exposed to unauthenticated callers or to other users; BSN/SSN, PAN, CVV or health data stored without a legal basis or business need
-- **High**: the same sensitive field exposed only to the authenticated owner or to admins; other special-category data (GDPR art. 9: race, ethnicity, religion, sexual orientation, biometric) or financial data (bank account, IBAN, salary, credit score) stored without need
-- **Medium**: other PII (email, phone, address, date of birth) exposed without a frontend need; ordinary PII (date of birth, full address, phone numbers, gender, marital status, precise location) stored without need
+- **High**: the same sensitive field exposed only to the authenticated owner or to admins; GraphQL or SignalR detailed errors outside Development; other special-category data (GDPR art. 9: race, ethnicity, religion, sexual orientation, biometric) or financial data (bank account, IBAN, salary, credit score) stored without need; BSN/SSN, PAN or health data copied into a secondary store without its own retention and encryption; no purge or erasure path for stored personal data
+- **Medium**: other PII (email, phone, address, date of birth) exposed without a frontend need; OData `$expand` without `MaxExpansionDepth`; ordinary PII (date of birth, full address, phone numbers, gender, marital status, precise location) stored without need, or copied into a secondary store
 - **Low**: non-sensitive over-fetch (unused ordinary fields, full entity in a lookup, legacy fields kept for backward compatibility); non-sensitive data stored without need (age range, city/country, preferences)
 - **Low**: EU Data Act or EU AI Act applicability "verify with the product owner" item (section 13); not a code finding
 - **Not a finding**: ids, foreign keys and `CreatedBy`/`ModifiedBy`, unless they expose another user's PII to non-admins; a stored field assessed JUSTIFIED. QUESTIONABLE or POTENTIALLY JUSTIFIED stored fields are rated one level lower than NOT JUSTIFIED.

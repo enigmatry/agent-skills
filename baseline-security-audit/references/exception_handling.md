@@ -37,6 +37,7 @@ Full stack traces go to the log sink; secrets, tokens or PII inside the logged m
 - Any environment other than Development: generic messages only
 - Configuration-driven: `UseDeveloperExceptionPage()` properly gated behind `app.Environment.IsDevelopment()` (on .NET 8+ the `WebApplication` template adds it automatically in Development)
 - No `#if DEBUG` and no string compares against `"Development"`/`"Production"`; use `IHostEnvironment.IsDevelopment()`/`IsEnvironment(...)`
+- IIS / App Service layer (`web.config`, `web.release.config`, release-pipeline variables): `<customErrors mode="Off">` (legacy), `<httpErrors errorMode="Detailed">` or `existingResponse="PassThrough"` while detailed errors are on, `ASPNETCORE_DETAILEDERRORS=true` or `ASPNETCORE_ENVIRONMENT=Development` in `<environmentVariables>` or pipeline variables = High (detailed errors reachable in production); `stdoutLogEnabled="true"` with `stdoutLogFile` under `wwwroot` or another served path = Medium
 
 ## 4. Response Format Security
 **Secure response example:**
@@ -66,6 +67,7 @@ For each area, provide:
   - Handler that swallows the exception without logging it — Medium
   - `exception.Message` from a non-domain exception in a response — Medium
   - `UseDeveloperExceptionPage()` not gated, or environment detected via `#if DEBUG`/string compares — Medium
+  - Detailed errors enabled at the IIS/App Service layer (`customErrors`/`httpErrors`/`ASPNETCORE_DETAILEDERRORS`/`ASPNETCORE_ENVIRONMENT=Development` in production) — High; `stdoutLogEnabled="true"` writing under `wwwroot` — Medium
   - Domain exceptions (`NotFoundException`, `ValidationException`, ...) surfacing their message — not a finding
 - Specific vulnerabilities with file locations
 - Examples of problematic error responses

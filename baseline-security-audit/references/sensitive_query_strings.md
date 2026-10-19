@@ -66,6 +66,8 @@ Search for query parameters that carry:
 ## 7. Logging and Monitoring Risks
 
 - URLs with sensitive query parameters being written to access logs
+- Where the full URL is written on this stack: IIS W3C logs include `cs-uri-query` by default (`<logFile logExtFileFlags="...UriQuery...">`), App Service web-server logging (same W3C format), Application Insights `request.url` (`requests | project url`), `Microsoft.AspNetCore.Hosting.Diagnostics` "Request starting" at `Information` (full path and query), `HttpLoggingFields.RequestQuery` (pattern owned by check 5 (logging.md)), OpenTelemetry `url.query` (redacted by default)
+- `OTEL_DOTNET_EXPERIMENTAL_ASPNETCORE_DISABLE_URL_QUERY_REDACTION=true` (or the `HTTPCLIENT` variant) switches that redaction off = Medium; otherwise rate the value in the URL per What to Report, not the sink
 - Browser history exposure of sensitive URL parameters
 - Analytics tools tracking URLs with private information
 - CDN or proxy logs capturing sensitive query parameters
@@ -85,6 +87,7 @@ queryParams:\s*\{[^}]*(token|email|password)
 window\.open\([^)]*(token|access_token)
 \$\{[^}]*(token|password)[^}]*\}                  // inside a URL template literal
 \[FromQuery\][^,)]*(token|password|email|bsn|ssn)
+logExtFileFlags|DISABLE_URL_QUERY_REDACTION|"Microsoft\.AspNetCore\.Hosting\.Diagnostics"\s*:\s*"(Information|Debug|Trace)"   // URL sinks (section 7)
 ```
 
 ## What to Report
@@ -93,5 +96,5 @@ For each finding, provide:
 - **File** and line number
 - **Code snippet** showing the URL or query string construction
 - **Data type** being exposed (credential, PII, etc.)
-- **Severity**: High (bearer or API tokens, passwords, session ids or SAS signatures in URLs built by the application) / Medium (PII such as email, BSN or date of birth in query strings) / Low (everything else, e.g. internal identifiers with limited exposure). Opaque or REST path ids are not findings
+- **Severity**: High (bearer or API tokens, passwords, session ids or SAS signatures in URLs built by the application) / Medium (PII such as email, BSN or date of birth in query strings; OpenTelemetry URL-query redaction switched off) / Low (everything else, e.g. internal identifiers with limited exposure). Opaque or REST path ids are not findings
 - **Recommendation**: use POST body, request headers, or server-side session storage instead

@@ -22,6 +22,8 @@ Search for string interpolation, concatenation, or formatting used to build SQL 
 - `FromSqlRaw()`, `ExecuteSqlRaw()`, `ExecuteSqlRawAsync()`, `SqlQueryRaw<T>()`
 - `CommandText` assignments with dynamic content (`SqlCommand`, Dapper `Query`/`Execute`)
 - Flag when the SQL string is built with `+`, `$"..."` assigned to a `string` first, `string.Format`, `StringBuilder`, or `string.Concat`
+- Dapper (`connection.Query/QueryAsync/QueryFirst/QuerySingle/Execute(sql)`) and ADO.NET (`SqlCommand.CommandText`, `new SqlCommand(sql)`, `new SqlDataAdapter(sql, conn)`) with a concatenated or interpolated `sql` — same severity scale as EF raw SQL; anonymous-object parameters (`new { id }`) and `Parameters.AddWithValue` are safe
+- The legacy `System.Data.SqlClient` package is unsupported: flag its `PackageReference` as Medium and recommend `Microsoft.Data.SqlClient`
 
 **Safe by construction** (these take a `FormattableString` and EF Core parameterizes every `{value}`):
 - `FromSql()`, `FromSqlInterpolated()`, `ExecuteSql()`, `ExecuteSqlInterpolated()`, `SqlQuery<T>()`
@@ -33,6 +35,7 @@ Check for unsafe stored procedure invocation:
 - Dynamic stored procedure name construction
 - Parameter values built through string manipulation
 - `CommandType.StoredProcedure` with concatenated names
+- T-SQL dynamic SQL in the database layer (`**/*.sql`, `*.sqlproj`/DACPAC projects, `migrationBuilder.Sql(...)`): `EXEC(@sql)`/`EXECUTE(` on a concatenated string, `sp_executesql` without a `@params` declaration (or with `@stmt` built by `+`), string-built SQL inside procedures, functions and triggers, and `migrationBuilder.Sql($"...")` interpolating a non-constant value. Rate with the same scale as C# injection (What to Report)
 
 ## 4. ORM Vulnerabilities
 
@@ -70,7 +73,7 @@ Identify all user-controlled input flowing into queries:
 
 **Files to examine:**
 - `**/*.cs` (repositories, `*DbContext*.cs`, `*Repository*.cs`, `*Query*.cs`, `*Handler*.cs`, Dapper helpers)
-- `**/*.sql` and `**/Migrations/**/*.cs` only for dynamic SQL inside stored procedures (`EXEC(`, `sp_executesql` with concatenated input)
+- `**/*.sql`, `**/*.sqlproj` (DACPAC) and `**/Migrations/**/*.cs` for dynamic SQL inside stored procedures, functions and `migrationBuilder.Sql(...)` (section 3)
 
 **Search patterns:**
 ```regex
@@ -85,6 +88,10 @@ StringBuilder[\s\S]{0,200}\b(SELECT|INSERT|UPDATE|DELETE|WHERE|ORDER BY)\b
 FormattableStringFactory\.Create|FromSqlInterpolated\(\$"\{\w+\}"\)
 CommandType\.StoredProcedure[\s\S]{0,120}\+
 System\.Linq\.Dynamic|\.Where\(\s*\$?"|\.OrderBy\(\s*\$?"
+new SqlDataAdapter\(\s*(\$"|"[^"]*"\s*\+|\w+\s*\+)
+System\.Data\.SqlClient                                        // legacy package: Medium, migrate to Microsoft.Data.SqlClient
+EXEC(UTE)?\s*\(\s*@\w+|sp_executesql\s+@\w+\s*(;|$)|sp_executesql\s+N?'[^']*'\s*\+   // T-SQL dynamic SQL (*.sql, *.sqlproj)
+migrationBuilder\.Sql\(\s*\$"
 ```
 
 ## What to Report

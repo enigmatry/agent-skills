@@ -114,6 +114,9 @@ options.UsePkce = false;
 // BAD — Resource Owner Password Credentials (ROPC)
 // typically seen as a direct call to the token endpoint with grant_type=password
 ```
+**The default is implicit:** `OpenIdConnectOptions.ResponseType` defaults to `id_token`. An `AddOpenIdConnect(...)` registration that neither sets `ResponseType = OpenIdConnectResponseType.Code` (`"code"`) nor uses `AddMicrosoftIdentityWebApp` (code + PKCE by default) is a High finding even though no bad literal appears. Source: https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.authentication.openidconnect.openidconnectoptions.responsetype
+
+**JWT bearer validation for APIs (`AddJwtBearer` / `AddMicrosoftIdentityWebApi`):** `TokenValidationParameters.ValidateAudience` or `ValidateIssuer = false`, `RequireHttpsMetadata = false`, no `ValidAudience(s)`/`ValidIssuer(s)` (`Audience` missing from the `AzureAd` section), or no scope or role check (`[RequiredScope]`, `RequiredScopeOrAppPermission`, a policy on the `scp`/`roles` claim) so any token issued in the tenant is accepted = High.
 
 **Frontend (Angular) — check OIDC client library configuration:**
 
@@ -147,6 +150,7 @@ responseType: 'id_token token'
 - `UsePkce`, `usePkce`, `pkce` — must be `true` or enabled by default
 - `grant_type=password` — ROPC, never acceptable
 - `grant_type=implicit` — never acceptable
+- `AddOpenIdConnect(` registrations with no `ResponseType` assignment; `TokenValidationParameters`, `ValidateAudience`, `ValidateIssuer`, `RequireHttpsMetadata`, `RequiredScope`, `"scp"`, `"roles"` for bearer APIs
 
 **Standards basis:** RFC 9700 (OAuth 2.0 Security Best Current Practice, BCP 240, January 2025) states that the implicit grant MUST NOT be used to issue access tokens and that the resource owner password credentials grant MUST NOT be used. OAuth 2.1 (draft-ietf-oauth-v2-1) removes both grants and mandates PKCE, but it is still an Internet-Draft, not a standard; cite RFC 9700 in findings, not OAuth 2.1.
 Sources: https://www.rfc-editor.org/rfc/rfc9700 and https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/
@@ -288,5 +292,5 @@ The following settings cannot be verified from source code alone. Ask someone wi
 For each finding, provide:
 - **Location**: file and line number (for code findings) or environment/configuration name (for policy findings)
 - **Issue**: description of the problem
-- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow, ROPC, Swagger or OpenAPI reachable in any environment other than Development, unrestricted Identity `/register` endpoint in production) / Medium (PKCE missing, non-user accounts using secrets where workload identity federation, certificates or managed identity are possible, policies that only `RequireAuthenticatedUser()`) / Low (token lifetime slightly above threshold, password policy deviating from NIST, Angular guard missing or mismatched, `DefaultAzureCredential` in production code)
+- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow including an OIDC registration that leaves `ResponseType` at its `id_token` default, ROPC, bearer API with audience/issuer validation disabled or without a scope or role check, Swagger or OpenAPI reachable in any environment other than Development, unrestricted Identity `/register` endpoint in production) / Medium (PKCE missing, non-user accounts using secrets where workload identity federation, certificates or managed identity are possible, policies that only `RequireAuthenticatedUser()`) / Low (token lifetime slightly above threshold, password policy deviating from NIST, Angular guard missing or mismatched, `DefaultAzureCredential` in production code)
 - **Recommendation**: the specific configuration change or policy update required
