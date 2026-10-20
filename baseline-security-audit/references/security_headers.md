@@ -249,6 +249,8 @@ On `linux` hosting `web.config` is ignored: the equivalent is `AddServerHeader =
 
 ## 12. What to Report
 
+Group header findings per severity: report **one** finding per severity level that lists every missing or misconfigured header at that level, with its location and the value to set.
+
 **Severity per header** (impact-based; the same header carries the same severity on the front-end and on the API):
 
 | Finding | Severity |
@@ -271,13 +273,10 @@ On `linux` hosting `web.config` is ignored: the equivalent is `AddServerHeader =
 **Example report:**
 
 ```
-Finding: Missing Content Security Policy
-- Header: Content-Security-Policy
-- Location: web.config
-- Current Value: Not configured
-- Issue: No CSP header present
-- Risk: High - Application vulnerable to XSS attacks, no CSP protection
-- Recommendation: Add CSP header starting with default-src 'none'; base-uri 'self'; frame-ancestors 'none'
+Finding: Security headers missing or misconfigured (Medium)
+- Cross-Origin-Opener-Policy missing (web.config customHeaders): add same-origin
+- X-Permitted-Cross-Domain-Policies missing (web.config customHeaders): add none
+- CSP without upgrade-insecure-requests (web.config:20): add the directive
 ```
 
 ## 13. Search Patterns

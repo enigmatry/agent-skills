@@ -17,7 +17,7 @@ Search for query parameters that carry:
 - JWT or bearer tokens
 - OAuth access or refresh tokens
 
-Not findings: opaque ids and REST path ids (`/users/{id}`). See check 7 (idor.md) for a sequential id that the server trusts for authorization without an ownership check. The OAuth `?code=` on the redirect URI is by design: flag only an authorization code written to logs. See check 19 (authentication_security.md) for a missing PKCE.
+Not findings: opaque ids and REST path ids (`/users/{id}`). See check 7 (idor.md) for a sequential id that the server trusts for authorization without an ownership check. The OAuth `?code=` on the redirect URI is by design: flag only an authorization code written to logs. See check 19 (authentication_security.md) for a missing PKCE. The Enigmatry Entry health check (`MapEntryHealthCheck`, `/healthcheck?token=`) takes its token in the query string by design across all projects: not a finding.
 
 ## 2. Personal Identifiable Information (PII) in URLs
 

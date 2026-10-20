@@ -151,16 +151,6 @@ aes.GenerateKey();
 
 **JWT signing (`AddJwtBearer`, `JwtSecurityTokenHandler`, `JsonWebTokenHandler`):** `alg: none` accepted (`RequireSignedTokens = false`, `ValidateIssuerSigningKey = false`), HS256 with a symmetric key shorter than 256 bits or a password-like `Jwt:Key` string, `new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]))` = High (a key committed in config is also check 1 (secrets.md)). `IdentityModelEventSource.ShowPII = true` outside Development = Medium; the search pattern is owned by check 5 (logging.md) section 5.
 
-### Crypto-agility inventory (post-quantum readiness)
-
-NIST IR 8547 (initial public draft, November 2024) deprecates RSA, ECDSA and ECDH at 112-bit security after 2030 and disallows quantum-vulnerable public-key algorithms after 2035; the EU coordinated PQC implementation roadmap (June 2025) asks member states to start the transition by the end of 2026 and to migrate high-risk systems by 2030. .NET 10 ships `MLKem` (FIPS 203) plus `MLDsa` and `SlhDsa` (FIPS 204/205, `[Experimental]` SYSLIB5006), which require OpenSSL 3.5+ or Windows CNG with PQC support.
-
-For a baseline audit this is Low and informational; do not raise findings for using RSA or ECDSA today. Instead:
-- Inventory asymmetric usage: `RSA.Create(`, `ECDsa.Create(`, `ECDiffieHellman.Create(`, `X509Certificate2` signing or key exchange, certificate pinning, JWT signing algorithms (`RS256`, `ES256`, `SecurityAlgorithms.Rsa*` / `Ecdsa*`)
-- Note long-lived encrypted or signed data that must stay confidential or verifiable past 2030 (harvest-now-decrypt-later risk)
-- Recommend a migration plan: isolate algorithm choices behind configuration, track library and platform PQC support, prefer TLS with hybrid key exchange (see ssl_tls_configuration.md)
-Sources: https://csrc.nist.gov/pubs/ir/8547/ipd , https://digital-strategy.ec.europa.eu/en/library/coordinated-implementation-roadmap-transition-post-quantum-cryptography , https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-10/libraries
-
 ## 6. Angular Client-Side Cryptography
 
 **Files to examine:**
@@ -201,7 +191,7 @@ Rules `S2245` (pseudorandom), `S4790` (weak hashing), `S5547` (weak cipher), `S5
 - **Critical**: MD5/SHA-1 for passwords; DES or RC2; ECB protecting secrets or PII; hard-coded or static key; home-made cipher or hash protecting secrets
 - **High**: TripleDES; unsalted or low-iteration SHA-2 for passwords; custom PBKDF2 below 600,000 (SHA-256) / 210,000 (SHA-512) iterations; `PasswordDeriveBytes` or the SHA-1/1000-iteration `Rfc2898DeriveBytes` constructor for passwords; unauthenticated CBC handed to clients; zero or static IV; `Random`/`Guid` for a secret; `CryptoJS.AES.encrypt` passphrase mode; `CryptoJS.PBKDF2` before 4.2.0; JWT `alg: none` accepted or a short or password-like HS256 signing key
 - **Medium**: MD5/SHA-1 for non-security integrity checks; Argon2id, scrypt or bcrypt below the section 1 parameters or bcrypt with truncated input; `ProtectKeysWithAzureKeyVault` without a shared key repository on multi-instance hosting; `IdentityModelEventSource.ShowPII = true` outside Development; obsolete .NET crypto APIs (SYSLIB0021/0022/0023/0033/0041/0045/0053: `Rijndael*`, `*CryptoServiceProvider`, `*Managed`, `RNGCryptoServiceProvider`, `HashAlgorithm.Create(string)`, `AesGcm(key)` without a tag size); discontinued `crypto-js` dependency; unreviewed `weak-cryptography` hotspots
-- **Low**: key sizes above the minimum but below the recommendation (AES-128, RSA-2048); key without documented rotation; crypto-agility inventory (RSA/ECDSA/ECDH usage with no post-quantum migration plan — informational)
+- **Low**: key sizes above the minimum but below the recommendation (AES-128, RSA-2048); key without documented rotation
 
 **Report for each finding:**
 - **Location**: File path and line number
@@ -237,9 +227,6 @@ new byte\[\]\s*\{.*\}.*[Kk]ey
 // Obsolete .NET crypto APIs (SYSLIB0021/0022/0023/0033/0041/0045/0053) — Medium; High for PasswordDeriveBytes or new Rfc2898DeriveBytes(...) without HashAlgorithmName (SHA-1, 1000 iterations) used for passwords
 \bRijndael(Managed)?\b|\w+CryptoServiceProvider\b|\b(SHA(1|256|384|512)|Aes)Managed\b|RNGCryptoServiceProvider
 new Rfc2898DeriveBytes\(|PasswordDeriveBytes|HashAlgorithm\.Create\(\s*"|new AesGcm\(\s*\w+\s*\)
-
-// Crypto-agility inventory (informational, Low — see section 5)
-RSA\.Create|ECDsa\.Create|ECDiffieHellman\.Create|RS256|ES256
 
 // JWT signing and Data Protection key ring (section 5)
 SymmetricSecurityKey\(Encoding\.|RequireSignedTokens\s*=\s*false|ValidateIssuerSigningKey\s*=\s*false|HmacSha256|ProtectKeysWithAzureKeyVault|PersistKeysTo

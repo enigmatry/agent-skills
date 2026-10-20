@@ -16,6 +16,8 @@ Search entity classes and DTOs for fields that should never be readable in plain
 
 **PCI DSS v4.0.1 requirement 3.3.1** forbids storing sensitive authentication data (CVV/CVC, full track data, PIN) after authorisation, even encrypted: a `CardVerificationCode` column is a Critical "remove" finding, not an encryption finding. Full PANs should be tokenised by the payment service provider rather than stored.
 
+Other personal data (name, e-mail address, phone number, address) may be stored in plain text; it is not a finding.
+
 **Files to examine:**
 - `Models/`, `Entities/`, `Domain/` — entity class definitions
 - `*DbContext.cs` — which entities are mapped
@@ -116,5 +118,5 @@ For each finding, provide:
 - **Entity/table** and **field/column** name (for column-level findings), or **infrastructure file** and line number (for TDE findings)
 - **Data type**: SSN, credit card, IBAN, biometric, medical record, TDE configuration, etc.
 - **Current state**: plain text, application-encrypted, column-encrypted (Always Encrypted), or TDE disabled
-- **Severity** (by data class of an unencrypted column): Critical (CVV/CVC or full track data stored at all; full PAN stored in clear) / High (BSN/SSN, bank account, IBAN, biometric or health data unencrypted; TDE explicitly disabled, or not enabled on SQL Server on a VM or on-premises) / Medium (other PII unencrypted) / Low (no key rotation evidence for the column-encryption key). A hard-coded or static key is reported under check 13 (cryptography_security.md), not here.
+- **Severity** (by data class of an unencrypted column): Critical (CVV/CVC or full track data stored at all; full PAN stored in clear) / High (BSN/SSN, bank account, IBAN, biometric or health data unencrypted; TDE explicitly disabled, or not enabled on SQL Server on a VM or on-premises) / Low (no key rotation evidence for the column-encryption key). A hard-coded or static key is reported under check 13 (cryptography_security.md), not here.
 - **Recommendation**: preferred approach (Always Encrypted, EF Core value converter, or Data Protection API for column-level; ensure TDE is enabled for database-level) and any key management improvements required

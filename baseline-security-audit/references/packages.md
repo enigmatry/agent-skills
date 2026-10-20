@@ -151,7 +151,9 @@ Use the NVD CVSS severity bands as reported by the advisory; do not shift them u
 Not findings: minor or patch updates available, pre-release versions available, documentation-only or feature-only updates, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
 
 ## What to Report
-For each package issue found, provide:
+Group package findings per ecosystem: all npm packages form **one** finding and all NuGet packages form **one** finding, rated at the highest severity among the packages it lists. Configuration findings from section 5 (lifecycle scripts, `min-release-age`, audit settings, package sources) stay separate findings.
+
+For each package in the grouped finding, list:
 - **Package name** and current version
 - **Latest available** version
 - **Risk level** (Critical/High/Medium/Low)

@@ -23,7 +23,7 @@ Test `PRODUCTION_URL` and, after asking once, any additional endpoints (API host
 curl -s -H "email: support@enigmatry.com" "https://api.ssllabs.com/api/v4/analyze?host=<host>&publish=off&all=done"
 # add &startNew=on to the first call for a fresh assessment, then repeat the call without it every 10-30 s until "status" is "READY" (or "ERROR")
 ```
-Read `endpoints[].grade` and `endpoints[].details`: `protocols` (section 2), `suites` (section 3), `cert` / `certChains` (section 4), `hstsPolicy` (section 8), `namedGroups` (X25519MLKEM768 present = post-quantum hybrid key exchange offered, section 12) and the vulnerability fields (`poodle`, `heartbleed`, `freak`, `logjam`, `drownVulnerable`, section 7).
+Read `endpoints[].grade` and `endpoints[].details`: `protocols` (section 2), `suites` (section 3), `cert` / `certChains` (section 4), `hstsPolicy` (section 8) and the vulnerability fields (`poodle`, `heartbleed`, `freak`, `logjam`, `drownVulnerable`, section 7).
 
 **(b) Local probes** when the API is unavailable (no registration, rate limit, host not reachable from SSL Labs):
 ```bash
@@ -294,4 +294,3 @@ Per endpoint: overall grade and the cap that applies (section 8); protocols (TLS
 **Low (Best Practice):**
 - ECDSA P-256/P-384 certificates (smaller handshakes; RSA key size above 2048 is not a finding either way)
 - Certificate Transparency compliance
-- Post-quantum hybrid key exchange (X25519MLKEM768) not offered — hygiene; default in current browsers, available on Windows Server 2025
