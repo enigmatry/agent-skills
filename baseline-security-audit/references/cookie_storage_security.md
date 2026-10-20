@@ -71,12 +71,7 @@ Report any `MinimumSameSitePolicy` of `Lax` or `Strict` as High when the app sig
 | Antiforgery cookie (`.AspNetCore.Antiforgery.*`) | `SameSite=Strict`, `HttpOnly` | Framework default; same-site only |
 | `XSRF-TOKEN` (Angular `withXsrfConfiguration` / `HttpClientXsrfModule`) | **not** `HttpOnly`, `Secure`, `SameSite=Lax` or `Strict` | Angular reads it from JavaScript to send the `X-XSRF-TOKEN` header |
 
-A missing `SameSite` attribute means the browser applies `Lax`; report that as Low "attribute not explicit", not as a CSRF vulnerability.
-
-**Required security flags:**
-- **HttpOnly = true**: Prevents JavaScript access (mitigates XSS)
-- **Secure = Always**: Only transmit over HTTPS (prevents MITM)
-- **SameSite = Strict/Lax**: Prevents CSRF attacks
+A missing `SameSite` attribute means the browser applies `Lax`; report that as Low "attribute not explicit", not as a CSRF vulnerability. Cookies used in third-party contexts (iframes) need `SameSite=None; Secure` plus the CHIPS `Partitioned` attribute (`options.Extensions.Add("Partitioned")`).
 
 **Cookie prefixes:** name authentication, session and antiforgery cookies `__Host-...` (`options.Cookie.Name = "__Host-..."`, also in `AddAntiforgery`; the browser rejects the cookie unless it is `Secure`, has `Path=/` and no `Domain`) and other first-party cookies `__Secure-...`. An authentication, session or antiforgery cookie without a prefix = Low.
 
@@ -84,69 +79,11 @@ A missing `SameSite` attribute means the browser applies `Lax`; report that as L
 
 ## 2. Backend Cookie Creation and Modification
 
-**Check manual cookie operations in controllers:**
-
-**Search for cookie manipulation:**
-```csharp
-// Look for Response.Cookies usage
-Response.Cookies.Append("key", "value");
-Response.Cookies.Delete("key");
-HttpContext.Response.Cookies.Append("key", "value");
-
-// Check CookieOptions configuration
-var cookieOptions = new CookieOptions
-{
-    HttpOnly = true,     // MUST be true for sensitive cookies
-    Secure = true,       // MUST be true
-    SameSite = SameSiteMode.Strict,  // SHOULD be Strict or Lax
-    Expires = DateTimeOffset.UtcNow.AddDays(7),
-    Path = "/"
-};
-Response.Cookies.Append("PreferenceKey", "value", cookieOptions);
-```
+Search `Response.Cookies.Append(`, `Response.Cookies.Delete(` and `new CookieOptions`; an `Append` without options, or with `HttpOnly`, `Secure` or `SameSite` missing, is rated by the cookie's purpose in section 8.
 
 An explicit `Domain` shares the cookie with every subdomain and rules out the `__Host-` prefix; an explicit `Domain` on an authentication, session or antiforgery cookie = Low.
 
-**Flags to raise:**
-```csharp
-// BAD - Missing security flags
-Response.Cookies.Append("SessionToken", token);
-
-// BAD - HttpOnly not set (vulnerable to XSS)
-Response.Cookies.Append("AuthToken", token, new CookieOptions
-{
-    Secure = true
-    // Missing HttpOnly = true
-});
-
-// BAD - Not secure (vulnerable to MITM)
-Response.Cookies.Append("AuthToken", token, new CookieOptions
-{
-    HttpOnly = true
-    // Missing Secure = true
-});
-
-// BAD - No SameSite protection (vulnerable to CSRF)
-Response.Cookies.Append("AuthToken", token, new CookieOptions
-{
-    HttpOnly = true,
-    Secure = true
-    // Missing SameSite setting
-});
-
-// GOOD - All security flags set
-Response.Cookies.Append("AuthToken", token, new CookieOptions
-{
-    HttpOnly = true,
-    Secure = true,
-    SameSite = SameSiteMode.Strict,
-    MaxAge = TimeSpan.FromHours(1)
-});
-```
-
 ## 3. Cookie Content Analysis
-
-**Check what data is stored in cookies:**
 
 **Search for sensitive data in cookie values:**
 ```csharp
@@ -162,21 +99,6 @@ Response.Cookies.Append("Username", username);  // Consider necessity
 Response.Cookies.Append("Role", userRole);  // High if trusted server-side without a signature - authorization data can be tampered with
 Response.Cookies.Append("Preferences", jsonPreferences);  // Check content
 ```
-
-**Sensitive data that should NEVER be in cookies:**
-- Passwords (plain or hashed)
-- Social Security Numbers
-- Credit card numbers
-- Bank account information
-- Medical information
-- Authentication secrets
-- Unencrypted personal identifiable information (PII)
-
-**Data that requires encryption if stored in cookies:**
-- Email addresses
-- Session identifiers (should be random, not contain user info)
-- Any personal data
-- Authorization information (`Role`, `IsAdmin` and similar must be signed or kept server-side)
 
 A plain user id (`UserId`) in a cookie is not sensitive on its own and is not a finding; only report it when it is trusted server-side for authorization without a signature.
 
@@ -210,62 +132,11 @@ this.cookieService.set('token', token, {
   httpOnly: false,   // NOTE: Cannot be set from JavaScript
   sameSite: 'Strict' // GOOD
 });
-
-// Using js-cookie library
-import Cookies from 'js-cookie';
-
-Cookies.set('token', token);  // BAD - No security options
-
-Cookies.set('token', token, {
-  expires: 7,
-  secure: true,      // GOOD
-  sameSite: 'Strict' // GOOD
-  // HttpOnly CANNOT be set from client-side JavaScript
-});
 ```
 
-**Important limitation:**
-- **HttpOnly flag CANNOT be set from JavaScript** - It must be set server-side
-- Client-side cookies are always accessible to JavaScript (XSS risk)
-- Sensitive data should NEVER be stored in client-side cookies
-
-**Flags to raise in Angular:**
-```typescript
-// BAD - Storing sensitive data client-side
-this.cookieService.set('password', password);  // Critical
-this.cookieService.set('ssn', ssn);  // Critical
-this.cookieService.set('email', email);  // Medium - PII, avoid
-
-// BAD - Missing secure flag
-this.cookieService.set('preferences', prefs);  // Missing secure: true
-
-// QUESTIONABLE - Client-side authentication token
-this.cookieService.set('authToken', token);  // Should be HttpOnly from server
-```
+`HttpOnly` cannot be set from JavaScript, so a cookie written client-side is always XSS-readable: a token or credential written this way is rated as unencrypted sensitive data (section 8); a preference cookie without `secure: true` is Low.
 
 ## 5. Local Storage Usage (Angular)
-
-**Check localStorage and sessionStorage usage:**
-
-**Search patterns:**
-```typescript
-// Direct localStorage access
-localStorage.setItem('key', 'value');
-localStorage.getItem('key');
-localStorage.removeItem('key');
-localStorage.clear();
-
-// Direct sessionStorage access
-sessionStorage.setItem('key', 'value');
-sessionStorage.getItem('key');
-sessionStorage.removeItem('key');
-sessionStorage.clear();
-
-// Using @ngx-pwa/local-storage or similar
-import { StorageMap } from '@ngx-pwa/local-storage';
-this.storage.set('key', value).subscribe();
-this.storage.get('key').subscribe();
-```
 
 **Files to search:**
 - `*.component.ts`
@@ -275,91 +146,16 @@ this.storage.get('key').subscribe();
 
 ## 6. Local Storage Content Analysis
 
-**Check what data is stored in local/session storage:**
-
-**Critical - Data that should NEVER be in local storage:**
-```typescript
-// Critical violations
-localStorage.setItem('password', password);  // Never store passwords!
-localStorage.setItem('ssn', user.ssn);  // Never store SSN!
-localStorage.setItem('creditCard', cardNumber);  // Never!
-localStorage.setItem('privateKey', privateKey);  // Never client-side!
-```
-
-**High - Home-grown credentials in localStorage:**
-```typescript
-localStorage.setItem('token', authToken);  // Home-grown JWT/bearer storage - XSS-readable, cannot be invalidated
-localStorage.setItem('sessionId', sessionId);  // Use HttpOnly cookies instead
-localStorage.setItem('apiKey', apiKey);  // Should be server-side only
-```
+Rate every stored value by the sensitivity scale in section 8; theme, language, cart contents, timestamps and UI settings are not findings.
 
 **Token caches of the standard OIDC libraries are rated by cache location, not as home-grown storage:**
 - MSAL (`@azure/msal-angular`, `cacheLocation`) or `oidc-client-ts` / `angular-auth-oidc-client` using `sessionStorage` → Low (library default, tab-scoped; note it, recommend keeping the default)
 - The same libraries configured for `localStorage` → Medium (persists across tabs and restarts; recommend `sessionStorage`)
 - Any home-grown `localStorage.setItem('token', ...)` of a JWT or bearer token → High
 
-**Medium - Sensitive data requiring encryption:**
-```typescript
-// Should be encrypted if storage is necessary
-localStorage.setItem('email', user.email);  // PII - encrypt or avoid
-localStorage.setItem('phoneNumber', user.phone);  // PII - encrypt or avoid
-localStorage.setItem('address', user.address);  // PII - encrypt or avoid
-localStorage.setItem('personalData', JSON.stringify(user));  // Encrypt!
-```
-
-**Not a finding - Non-sensitive data (acceptable):**
-```typescript
-// Generally safe to store unencrypted
-localStorage.setItem('theme', 'dark');  // User preference
-localStorage.setItem('language', 'en');  // Language preference
-localStorage.setItem('cartItems', JSON.stringify(cart));  // Shopping cart
-localStorage.setItem('lastVisit', new Date().toISOString());  // Timestamp
-localStorage.setItem('settings', JSON.stringify(settings));  // UI settings
-```
-
 ## 7. Encryption Requirements for Local Storage
 
-**If sensitive data must be stored in local storage, verify encryption:**
-
-**Check for encryption usage:**
-```typescript
-// RED FLAG - crypto-js is discontinued ("no longer maintained" per its README) and
-// CVE-2023-46233 made its PBKDF2 default to SHA-1 with 1 iteration before 4.2.0.
-// Passphrase-based CryptoJS.AES.encrypt(data, 'passphrase') derives key and IV with MD5.
-import * as CryptoJS from 'crypto-js';          // Medium: unmaintained dependency
-CryptoJS.AES.encrypt(data, passphrase)           // High: weak key derivation
-
-// ACCEPTABLE - Web Crypto API (built into every supported browser)
-const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['encrypt', 'decrypt']);
-const iv = crypto.getRandomValues(new Uint8Array(12));
-const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
-```
-
-**Encryption considerations:**
-```typescript
-// BAD - Storing encryption key in code
-const ENCRYPTION_KEY = 'hardcoded-key-12345';  // Never hardcode!
-
-// BAD - Static salt and low iteration count
-CryptoJS.PBKDF2(password, 'salt', { iterations: 1000 })
-
-// BETTER - Web Crypto PBKDF2 with a random salt and >= 600,000 iterations (SHA-256)
-const salt = crypto.getRandomValues(new Uint8Array(16));
-const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
-const derived = await crypto.subtle.deriveKey(
-  { name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' },
-  baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-
-// NOTE: Client-side encryption provides limited security
-// If data is truly sensitive, store server-side instead
-```
-
-**Important limitations of client-side encryption:**
-- Encryption key must be available client-side (exposure risk)
-- Vulnerable to sophisticated XSS attacks
-- Does not protect against malicious browser extensions
-- User can inspect/modify encrypted data
-- **Best practice: Don't store sensitive data client-side at all**
+Client-side encryption is a weak control (the key is in the browser and readable by the same XSS); the only acceptable primitive is the Web Crypto API (`crypto.subtle`, AES-GCM, PBKDF2 with a random salt). `crypto-js` and hardcoded keys are rated by check 13 (cryptography_security.md) section 6. Prefer not storing the data client-side at all.
 
 ## 8. What to Report
 
@@ -387,27 +183,6 @@ For each finding, provide:
 - **Risk**: Specific vulnerability (XSS, MITM, CSRF)
 - **Recommendation**: Add the missing security flag
 
-**Example report:**
-```
-Finding: Cookie Missing HttpOnly Flag
-- Location: Controllers/AuthController.cs, line 45
-- Cookie Name: "UserPreferences"
-- Missing Flag: HttpOnly = true
-- Purpose: Storing user UI preferences
-- Risk: Low - Cookie accessible to JavaScript (XSS risk)
-- Recommendation: Add HttpOnly = true to CookieOptions
-```
-
-```
-Finding: Authentication Cookie Missing Secure Flag
-- Location: Program.cs, line 61 (AddCookie options)
-- Cookie Name: ".AspNetCore.Cookies"
-- Missing Flag: SecurePolicy = CookieSecurePolicy.Always
-- Purpose: Authentication session
-- Risk: High - Session cookie can be sent over plain HTTP and captured in transit
-- Recommendation: Set options.Cookie.SecurePolicy = CookieSecurePolicy.Always (and configure UseForwardedHeaders behind Front Door / Application Gateway)
-```
-
 ### Unencrypted Sensitive Data:
 
 **Report sensitive data in cookies or local storage:**
@@ -430,102 +205,7 @@ For each finding, provide:
   - **SERVER-SIDE**: Move to server-side storage
   - **HTTPONLY COOKIE**: Use HttpOnly cookie instead of localStorage
 
-**Example report:**
-```
-Finding: Unencrypted Email Address in Local Storage
-- Location: services/user.service.ts, line 67
-- Storage Type: localStorage
-- Data Type: Email address (PII)
-- Sensitivity: Medium
-- Encryption: None (plaintext)
-- Usage: Displayed in user profile header
-- Risk: Medium - Email exposed to XSS attacks, browser extensions
-- Recommendation: 
-  1. PRIMARY: Fetch email from server when needed (don't store)
-  2. ALTERNATIVE: Encrypt with the Web Crypto API (AES-GCM) before storing; never crypto-js
-  3. BETTER: Use server-side session with HttpOnly cookie
-```
-
-```
-Finding: Authentication Token in Local Storage
-- Location: services/auth.service.ts, line 34
-- Storage Type: localStorage
-- Data Type: JWT authentication token (home-grown storage, not an OIDC library cache)
-- Sensitivity: High
-- Encryption: None (plaintext JWT)
-- Usage: Sent with API requests for authentication
-- Risk: High - Token accessible to XSS, cannot be invalidated client-side
-- Recommendation: 
-  1. REQUIRED: Move to HttpOnly cookie set by server
-  2. Update API to accept cookie-based authentication
-  3. Remove localStorage.setItem('token', ...) completely
-```
-
-## 9. SameSite Attribute Details
-
-**Understand SameSite modes:**
-
-```csharp
-// Strict - Most secure, may break some legitimate scenarios
-SameSite = SameSiteMode.Strict
-// Cookie sent only for same-site requests
-// Use for: Session cookies, authentication cookies
-// Limitation: May break OAuth flows, payment gateways
-
-// Lax - Good balance of security and usability
-SameSite = SameSiteMode.Lax
-// Cookie sent for same-site + top-level GET navigation
-// Use for: Most application cookies
-// Good default choice
-
-// None - Least secure, requires Secure flag
-SameSite = SameSiteMode.None, Secure = true
-// Cookie sent for all requests (including cross-site)
-// Use for: Third-party contexts (iframes, CORS APIs)
-// Must be combined with Secure = true
-```
-
-**Recommendations:**
-- **Authentication/Session cookies**: Use `Lax` (the ASP.NET Core default); `Strict` breaks OpenID Connect sign-in with Entra ID
-- **Antiforgery cookie**: `Strict` (framework default)
-- **OIDC correlation and nonce cookies**: `None` with `Secure = true`; never flag these
-- **Third-party contexts (iframes)**: Use `None` with `Secure = true` and add the CHIPS `Partitioned` attribute via `options.Extensions.Add("Partitioned")`
-- **Default**: `Lax` is the right default for most cookies
-
-## 10. Best Practices Verification
-
-**Verify that the application follows these practices:**
-
-✅ **Cookie security:**
-- All cookies have `HttpOnly = true` except cookies that are JavaScript-readable by design (`XSRF-TOKEN`, client-side preference cookies)
-- All cookies have `Secure = true` (require HTTPS); `UseForwardedHeaders` is configured behind Front Door or Application Gateway so `CookieSecurePolicy` sees HTTPS
-- All cookies have appropriate `SameSite` setting
-- Authentication cookies use `SameSite = Lax`; OIDC correlation/nonce cookies use `None; Secure`
-- Cookie names don't reveal sensitive information; authentication, session and antiforgery cookies carry the `__Host-` prefix and set no `Domain`
-- Cookies have appropriate expiration times
-
-✅ **Local storage security:**
-- No authentication tokens in localStorage
-- No passwords or secrets in localStorage
-- No unencrypted sensitive data (email, SSN, etc.)
-- Sensitive data is encrypted if storage is unavoidable
-- Regular cleanup of stored data
-- Minimal data stored client-side
-
-✅ **Alternative approaches:**
-- Use HttpOnly cookies for authentication instead of localStorage
-- Fetch sensitive data from server when needed
-- Use server-side sessions for sensitive state
-- Use secure token storage mechanisms
-- Implement proper session management
-
-✅ **Angular specific:**
-- Authentication service uses HttpOnly cookies (set by backend)
-- No client-side token storage in localStorage
-- Encryption utilities if client-side storage is required
-- Clear documentation of what's stored and why
-
-## 11. Testing and Verification
+## 9. Testing and Verification
 
 **Verification steps:**
 

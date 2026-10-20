@@ -27,18 +27,12 @@ Scan the codebase for packages with known security vulnerabilities, deprecated p
 - ✅ Transitive dependencies with security issues
 - ❌ Packages from untrusted or unofficial sources
 
-**Priority vulnerability types:**
-- Authentication/authorization bypasses
-- Remote code execution vulnerabilities
-- SQL injection vulnerabilities
-- Cross-site scripting (XSS) vulnerabilities
-- Denial of service vulnerabilities
-
 ## 3. Deprecation and End-of-Life Analysis
 **Check for:**
 - Packages officially deprecated by maintainers
 - Packages with no recent updates (>2 years)
 - Packages targeting end-of-life frameworks (.NET Framework versions, Node.js versions)
+- Packages with successor/replacement packages available or maintenance mode warnings
 
 **Runtime end-of-life (verify against endoflife.date at audit time; status as of October 2026):**
 
@@ -55,8 +49,6 @@ Scan the codebase for packages with known security vulnerabilities, deprecated p
 | Angular 21, 22 | Supported | same |
 
 Sources: https://dotnet.microsoft.com/platform/support/policy/dotnet-core , https://endoflife.date/nodejs , https://endoflife.date/angular
-- Packages with successor/replacement packages available
-- Packages with maintenance mode warnings
 
 ## 4. Version Currency Assessment
 **Analyze version gaps:**
@@ -80,12 +72,6 @@ dotnet nuget why <package>           # shows the transitive path that pulls a fl
 npm audit
 npm audit --audit-level high
 npm outdated
-
-# Alternative tools
-# - Snyk scan
-# - OWASP Dependency Check
-# - WhiteSource/Mend
-# - GitHub Dependabot alerts
 ```
 
 ### NuGetAudit configuration review
@@ -97,7 +83,7 @@ Restore-time auditing is what produces `NU1901`–`NU1904` in the first place. C
 - every `<NuGetAuditSuppress Include="https://github.com/advisories/..." />` — needs a comment stating why the advisory does not apply
 - `<NoWarn>` must not list `NU1901`–`NU1904`
 
-Findings: audit disabled, or transitive audit off (`direct` mode or no `NuGetAuditMode` on net8.0/net9.0) = Medium; a suppression without a justification comment = Low.
+Findings: audit disabled, transitive audit off (`direct` mode or no `NuGetAuditMode` on net8.0/net9.0), or `NU1901`–`NU1904` in `<NoWarn>` = Medium; a suppression without a justification comment = Low.
 Sources: https://learn.microsoft.com/en-us/nuget/concepts/auditing-packages , https://learn.microsoft.com/en-us/dotnet/core/compatibility/sdk/10.0/nugetaudit-transitive-packages
 
 ### Audit sources on private feeds
@@ -131,6 +117,10 @@ After the September 2025 chalk/debug compromise and the Shai-Hulud worm, npm rev
 Findings: no lockfile or `npm install` in CI = High; lifecycle scripts not blocked = Medium; no `min-release-age` or no `npm audit signatures` = Low.
 Sources: https://github.com/orgs/community/discussions/179562 , https://www.infoq.com/news/2026/08/npm-12-released/ , https://semgrep.dev/blog/2025/chalk-debug-and-color-on-npm-compromised-in-new-supply-chain-attack
 
+### Package sources
+
+Every `"resolved"` URL in `package-lock.json` (or `resolved` line in `yarn.lock`) and every `<add key=... value=...>` source in `nuget.config` must point at a configured registry (`https://registry.npmjs.org/`, `https://api.nuget.org/v3/index.json`, or the organisation's Azure Artifacts feed `https://pkgs.dev.azure.com/...`). Search with `"resolved": "(?!https://registry\.npmjs\.org/|https://pkgs\.dev\.azure\.com/)` and report each other host as High.
+
 ## 6. Risk Assessment Criteria
 **Categorize findings by risk level:**
 
@@ -145,7 +135,7 @@ Use the NVD CVSS severity bands as reported by the advisory; do not shift them u
 - CVSS 7.0–8.9
 - Deprecated packages with security implications
 - Packages targeting an end-of-life runtime (see section 3)
-- A lockfile `resolved` URL or a `nuget.config` package source outside the configured registries (see Additional Considerations)
+- A lockfile `resolved` URL or a `nuget.config` package source outside the configured registries (section 5)
 - No lockfile committed, or CI runs `npm install` instead of `npm ci` (section 5)
 
 **Medium (plan for update):**
@@ -160,14 +150,6 @@ Use the NVD CVSS severity bands as reported by the advisory; do not shift them u
 
 Not findings: minor or patch updates available, pre-release versions available, documentation-only or feature-only updates, `^`/`~` ranges in `package.json` when a lockfile is committed and CI uses `npm ci`.
 
-## 7. Compatibility and Breaking Changes
-**Assess update impact:**
-- API breaking changes between versions
-- Framework requirement changes
-- Dependency conflicts
-- Configuration changes required
-- Testing requirements for updates
-
 ## What to Report
 For each package issue found, provide:
 - **Package name** and current version
@@ -179,34 +161,3 @@ For each package issue found, provide:
 - **Update recommendation** (specific version to upgrade to)
 - **Breaking changes** or compatibility concerns
 - **Priority** for remediation
-
-
-```
-## Package Vulnerability Assessment
-
-### Critical Issues (Immediate Action Required):
-1. **PackageName v1.2.3** → Recommended: v2.1.0
-   - CVE-2023-XXXX: Remote Code Execution
-   - CVSS Score: 9.8 (Critical)
-   - Affected: Authentication module
-   - Action: Immediate upgrade required
-
-### High Priority Issues:
-[Similar format for high priority items]
-
-### Update Recommendations Summary:
-- Total packages analyzed: X
-- Vulnerable packages: X
-- Deprecated packages: X  
-- Outdated packages: X
-- Immediate action required: X packages
-```
-
-## Additional Considerations
-1. **Supply chain security**: every `"resolved"` URL in `package-lock.json` (or `resolved` line in `yarn.lock`) and every `<add key=... value=...>` source in `nuget.config` must point at a configured registry (`https://registry.npmjs.org/`, `https://api.nuget.org/v3/index.json`, or the organisation's Azure Artifacts feed `https://pkgs.dev.azure.com/...`). Search with `"resolved": "(?!https://registry\.npmjs\.org/|https://pkgs\.dev\.azure\.com/)` and report each other host as High
-2. **Update testing**: Identify packages requiring extensive testing
-3. **Rollback planning**: Consider packages with complex rollback requirements
-4. **Monitoring setup**: Ongoing vulnerability scanning automation
-
-Focus on providing actionable intelligence with clear prioritization for remediation efforts.
-

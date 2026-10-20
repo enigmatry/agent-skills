@@ -12,59 +12,11 @@ Analyze the codebase to identify missing or insufficient input validation that c
 
 **ASP.NET Core / .NET Applications:**
 
-**Check for validation attributes on models:**
-```csharp
-// Look for Data Annotation attributes
-[Required]
-[StringLength]
-[Range]
-[RegularExpression]
-[EmailAddress]
-[Phone]
-[Url]
-[CreditCard]
-[Compare]
-[MinLength]
-[MaxLength]
-
-// Custom validation
-[CustomValidation]
-IValidatableObject
-ValidationAttribute
-```
-
-**Check for ModelState validation in controllers:**
-```csharp
-// REQUIRED pattern in API controllers/actions
-if (!ModelState.IsValid)
-{
-    return BadRequest(ModelState);
-}
-
-// Or using ApiController attribute (automatic validation)
-[ApiController]
-public class MyController : ControllerBase
-```
-
-**FluentValidation usage:**
-```csharp
-// Validator classes
-public class MyValidator : AbstractValidator<MyModel>
-{
-    public MyValidator()
-    {
-        RuleFor(x => x.Property).NotEmpty();
-        RuleFor(x => x.Email).EmailAddress();
-    }
-}
-
-// Check for validator registration in DI
-services.AddValidatorsFromAssemblyContaining<MyValidator>();
-```
+**Check for validation:** Data Annotations (`[Required]`, `[StringLength]`, `[Range]`, `[RegularExpression]`, `[EmailAddress]`, `[MaxLength]`), `IValidatableObject` / custom `ValidationAttribute`, or FluentValidation `AbstractValidator<T>` classes registered with `AddValidatorsFromAssemblyContaining<T>()` and actually invoked (a pipeline behaviour, an endpoint filter or an explicit `ValidateAsync`). `[ApiController]` returns 400 automatically on an invalid `ModelState`; a controller without it needs an explicit `ModelState.IsValid` check.
 
 **Flags to raise:**
-- Actions on controllers **without** `[ApiController]` that accept user input and have no `ModelState.IsValid` check or FluentValidation auto-validation (`[ApiController]` returns 400 automatically on invalid `ModelState`; do not flag those)
-- DTO/Model classes without validation attributes, only when the type is bound from a request (see section 8 for the scope)
+- Actions on controllers **without** `[ApiController]` that accept user input and have no `ModelState.IsValid` check or FluentValidation invocation
+- DTO/Model classes without validation attributes, only when the type is bound from a request (see section 7 for the scope)
 - Direct binding of user input to database entities without validation
 - Missing validation for file uploads (size, type, content)
 
@@ -94,56 +46,13 @@ this.form = this.fb.group({
   age: ['', [Validators.min(18), Validators.max(100)]],
   website: ['', Validators.pattern(/^https?:\/\/.+/)]
 });
-
-// Custom validators
-Validators.pattern()
-Validators.min()
-Validators.max()
-CustomValidators
-```
-
-**HTML5 validation attributes:**
-```html
-<input type="text" required minlength="3" maxlength="50">
-<input type="email" required>
-<input type="number" min="0" max="100">
-<input type="url">
-<input type="tel" pattern="[0-9]{3}-[0-9]{3}-[0-9]{4}">
 ```
 
 ## 3. Input Types and Validation Rules
 
 **Search for input fields and verify validation:**
 
-**Text inputs:**
-- Length constraints (min/max length)
-- Format validation (regex patterns)
-- Character whitelist/blacklist
-- Trim whitespace
-- Prevent null/empty when required
-
-**Numeric inputs:**
-- Range validation (min/max values)
-- Data type enforcement (integer, decimal)
-- Prevent negative numbers when inappropriate
-- Handle overflow/underflow
-
-**Email addresses:**
-- Email format validation
-- Length limits
-- Normalize (lowercase, trim)
-
-**URLs:**
-- URL format validation
-- Protocol whitelist (http/https only)
-- Length limits
-- Prevent javascript:, data:, file: protocols
-
-**Dates:**
-- Date format validation
-- Range validation (min/max dates)
-- Future/past date restrictions
-- Time zone handling
+**Text, numeric, email, URL and date inputs:** length and format for text, range and type for numbers, format for email, protocol allow-list for URLs (`https` only; reject `javascript:`, `data:`, `file:`), range for dates.
 
 **File uploads:**
 - File type validation (extension and MIME type)
@@ -154,16 +63,6 @@ CustomValidators
 - Upload endpoint with no size limit or an extension-only type check = Medium
 
 **Passwords:** length and composition rules are owned by check 19 (authentication_security.md); hashing by check 13 (cryptography_security.md). Here only check that the password field is bound server-side and has a maximum length.
-
-**Phone numbers:**
-- Format validation
-- Country code validation
-- Length constraints
-
-**Credit cards:**
-- Format validation (Luhn algorithm)
-- Card type detection
-- Expiration date validation
 
 ## 4. Specific Validation Vulnerabilities
 
@@ -180,34 +79,9 @@ public IActionResult Update([Bind("Name,Email")] User user)
 // For APIs: a dedicated request DTO, or reject unknown members (.NET 8+)
 new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow }
 ```
-**Mass assignment / BOPLA (owned here):** in request-bound DTOs and entities (section 8 scope) flag settable `Id`, `OwnerId`, `UserId`, `TenantId`, `Role`/`Roles`, `IsAdmin`, `IsActive`/`IsApproved`, `Price`, `Balance`, `Discount`, `Status` that the caller must not set; `TryUpdateModelAsync(model)` without an include list; AutoMapper `CreateMap<Dto, Entity>()` or `ReverseMap()` that maps those members without `.Ignore()`. High when the field drives authorization, tenancy or money; Medium otherwise.
+**Mass assignment / BOPLA (owned here):** in request-bound DTOs and entities (section 7 scope) flag settable `Id`, `OwnerId`, `UserId`, `TenantId`, `Role`/`Roles`, `IsAdmin`, `IsActive`/`IsApproved`, `Price`, `Balance`, `Discount`, `Status` that the caller must not set; `TryUpdateModelAsync(model)` without an include list; AutoMapper `CreateMap<Dto, Entity>()` or `ReverseMap()` that maps those members without `.Ignore()`. High when the field drives authorization, tenancy or money; Medium otherwise.
 
-**Integer Overflow/Underflow:**
-```csharp
-// Check for unchecked numeric conversions
-int.Parse(userInput) // Can throw exception
-Convert.ToInt32(userInput) // Can throw exception
-
-// Better with validation
-if (int.TryParse(userInput, out int value) && value >= 0 && value <= 1000)
-```
-
-**String Length Attacks:**
-```csharp
-// MISSING - no length validation
-public string Name { get; set; }
-
-// GOOD - length limit
-[StringLength(100, MinimumLength = 2)]
-public string Name { get; set; }
-```
-
-**Regex Denial of Service (ReDoS):**
-```csharp
-// Check for complex regex patterns that could cause ReDoS
-[RegularExpression(@"^(a+)+$")] // DANGEROUS - catastrophic backtracking
-[RegularExpression(@"^[a-zA-Z0-9]{3,20}$")] // SAFE - simple pattern
-```
+**ReDoS:** nested quantifiers in a `[RegularExpression]` or `Regex` pattern applied to user input (`^(a+)+$`) cause catastrophic backtracking; use `RegexOptions.NonBacktracking` or a match timeout (Medium).
 
 **Unsafe deserialization:** Newtonsoft `TypeNameHandling` other than `None` on untrusted input = High; `BinaryFormatter` (removed in .NET 9) = High; System.Text.Json `MaxDepth` left at its default on large untrusted payloads = Low.
 
@@ -217,18 +91,7 @@ public string Name { get; set; }
 
 ## 5. Framework-Specific Validation Checks
 
-**ASP.NET Core Minimal APIs:**
-```csharp
-// Check for validation in minimal APIs
-app.MapPost("/api/users", async (MyModel model, IValidator<MyModel> validator) =>
-{
-    var result = await validator.ValidateAsync(model);
-    if (!result.IsValid)
-        return Results.ValidationProblem(result.ToDictionary());
-    
-    // Process valid input
-});
-```
+**Minimal APIs before .NET 10:** a handler that binds a body is validated only when it injects an `IValidator<T>` (or an endpoint filter does) and returns `Results.ValidationProblem` on failure; a handler with neither = missing validation.
 
 **.NET 10 built-in minimal API validation (opt-in):**
 ```csharp
@@ -244,18 +107,6 @@ app.MapPost("/api/orders", (Order order) => ...).DisableValidation();
 ```
 Flags: a net10.0 minimal API project that relies on DataAnnotations without `builder.Services.AddValidation()` (the attributes are silently ignored) = Medium; `.DisableValidation()` on an endpoint that takes user input = Medium.
 Source: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis/validation
-
-**Entity Framework Core:**
-```csharp
-// Check for validation before SaveChanges
-protected override void OnModelCreating(ModelBuilder modelBuilder)
-{
-    modelBuilder.Entity<User>()
-        .Property(u => u.Email)
-        .IsRequired()
-        .HasMaxLength(256);
-}
-```
 
 ## 6. What to Report
 
@@ -288,41 +139,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - **Medium**: Other missing server-side validation
 - **Low**: Client-side validation missing while server-side validation exists. Client-side validation on its own never counts as validation: an input validated only in Angular is rated as missing server-side validation (High or Medium above)
 
-## 7. Validation Best Practices
-
-**Verify that the application:**
-- Validates ALL user input server-side (never trust client)
-- Uses whitelisting approach (allow known good) over blacklisting
-- Validates data type, format, length, and range
-- Provides clear validation error messages (without revealing sensitive info)
-- Validates at multiple layers (client, API, business logic)
-- Uses established validation libraries/frameworks
-- Validates file uploads thoroughly (type, size, content)
-- Protects against mass assignment vulnerabilities
-- Handles validation errors gracefully
-- Logs validation failures for security monitoring
-
-**Client-side validation benefits:**
-- Immediate user feedback
-- Reduced server load
-- Better user experience
-- Defense-in-depth approach
-
-**Server-side validation is mandatory because:**
-- Client-side validation can be bypassed
-- Security cannot rely on client controls
-- Malicious users can craft requests directly
-- Compliance and regulatory requirements (not a code check: ask the user which requirements apply; do not report them as findings)
-
-**Recommended validation approach:**
-```
-1. Client-side validation (UX, immediate feedback)
-2. API/Controller validation (security gate)
-3. Business logic validation (domain rules)
-4. Database constraints (last line of defense)
-```
-
-## 8. Search Patterns
+## 7. Search Patterns
 
 **Look for these patterns indicating potential missing validation:**
 
@@ -360,23 +177,3 @@ TypeNameHandling\.(All|Auto|Objects|Arrays)|BinaryFormatter|Path\.Combine\(|Dire
 - Validators: `*Validator.cs`
 - API endpoints in minimal APIs: `Program.cs`, `*Endpoints.cs`
 - Client-side forms: `*.component.ts`, `*.component.html`
-
-## 9. Additional Considerations
-
-**Business Logic Validation:**
-- Check for business rule validation beyond basic format checks
-- Check for concurrent modification handling
-- Validate relationships and referential integrity
-
-**Sanitization vs Validation:**
-- Validation: Reject invalid input
-- Sanitization: Clean/transform input to safe format
-- Both should be used together, validation first
-- Never sanitize to "fix" invalid input without user notification
-
-**Internationalization:**
-- Validate international characters appropriately
-- Support various date/number formats
-- Handle different character encodings
-- Validate locale-specific formats (phone, postal codes)
-

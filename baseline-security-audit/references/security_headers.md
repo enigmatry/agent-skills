@@ -86,97 +86,23 @@ Analyze response security headers and removal of version-disclosing headers to i
 - Prevents base tag injection attacks
 - Only allows base URI from same origin
 
-**3. script-src** (no unsafe values; any of the values below is a Medium finding):
-```xml
-<!-- GOOD -->
-script-src 'self' 'nonce-{random}';
-script-src 'self' 'sha256-{hash}';
+**3. script-src**: `'self'` with per-request nonces or hashes; `'unsafe-inline'`, `'unsafe-eval'`, `data:` or `blob:` in `script-src` = Medium.
 
-<!-- BAD - NEVER use these -->
-script-src 'unsafe-inline';   <!-- Allows any inline script - XSS risk -->
-script-src 'unsafe-eval';     <!-- Allows eval() - XSS risk -->
-script-src data:;             <!-- Allows data: URIs - XSS risk -->
-script-src blob:;             <!-- Allows blob: URIs - XSS risk -->
-```
-
-**Inline scripts handling:**
-- **Preferred**: Use nonces (cryptographically random, unique per request) together with `'strict-dynamic'`
-- **Alternative**: Use SHA-256/SHA-384/SHA-512 hashes
-- **Never**: Use 'unsafe-inline'
-
-**4. style-src** (IMPORTANT - avoid unsafe-inline):
-```xml
-<!-- GOOD -->
-style-src 'self' 'nonce-{random}';
-style-src 'self' 'sha256-{hash}';
-
-<!-- BAD -->
-style-src 'unsafe-inline';  <!-- CSS injection, data exfiltration risk; Low on an Angular app (see below) -->
-```
+**4. style-src**: `'self'` with nonces or hashes; `'unsafe-inline'` is a CSS-injection risk, rated Low on an Angular app (see below).
 
 **Angular CSP reality:** a `'nonce-...'` value in a static `web.config` is a fixed string, which equals no nonce (Medium). The supported options are a server-injected nonce via `ngCspNonce` / `CSP_NONCE` (SSR or a rewrite step), build-time `security.autoCsp` in `angular.json` (hash-based, scripts only, not with SSR), or accepting `style-src 'unsafe-inline'` because Angular injects component styles at runtime. Rate `style-src 'unsafe-inline'` Low with that remediation; `script-src 'unsafe-inline'` stays Medium.
 
 **CSP Level 3:** the preferred script policy is `script-src 'nonce-{RANDOM}' 'strict-dynamic'` (or hashes with `'strict-dynamic'`), which lets nonced scripts load their own dependencies; send violation reports with `report-to` plus a `Reporting-Endpoints` header (`report-uri` is deprecated). A `Content-Security-Policy-Report-Only` header is monitoring, not enforcement: without an enforcing `Content-Security-Policy` header, report CSP as missing (High). Angular supports Trusted Types via `require-trusted-types-for 'script'; trusted-types angular angular#bundler`; their absence is not a finding (recommendation only).
 
-**5. frame-ancestors** (MUST specify - not covered by default-src):
-```xml
-<!-- GOOD - Disallow all framing -->
-frame-ancestors 'none';
-
-<!-- GOOD - Allow same-origin framing only -->
-frame-ancestors 'self';
-
-<!-- BAD - Missing this directive -->
-```
+**5. frame-ancestors** (MUST be present; not covered by `default-src`): `'none'` or `'self'`.
 
 **6. object-src 'none' and upgrade-insecure-requests** (OWASP baseline; each absent = Medium): `object-src 'none'` is only implied when `default-src` is `'none'`, so add it explicitly with `default-src 'self'`; `upgrade-insecure-requests` rewrites mixed-content requests to HTTPS.
 
-**RED FLAGS:**
-```xml
-<!-- Missing CSP entirely -->
-<!-- No Content-Security-Policy header -->
-
-<!-- Weak CSP -->
-<add name="Content-Security-Policy" value="default-src *" />
-<add name="Content-Security-Policy" value="script-src 'unsafe-inline'" />
-<add name="Content-Security-Policy" value="default-src 'self'; script-src 'unsafe-eval'" />
-
-<!-- Missing frame-ancestors -->
-<add name="Content-Security-Policy" value="default-src 'self'" />
-<!-- Missing base-uri -->
-
-<!-- Missing default-src entirely -->
-<add name="Content-Security-Policy" value="script-src 'self'; style-src 'self'" />
-```
-
 ## 4. X-Frame-Options
 
-**Purpose**: Prevents clickjacking attacks
-
-**GOOD configuration:**
-```xml
-<!-- Deny all framing -->
-<add name="X-Frame-Options" value="DENY" />
-
-<!-- Allow same-origin framing only -->
-<add name="X-Frame-Options" value="SAMEORIGIN" />
-```
-
-**MUST align with CSP frame-ancestors:**
-- `frame-ancestors 'none'` ↔ `X-Frame-Options: DENY`
-- `frame-ancestors 'self'` ↔ `X-Frame-Options: SAMEORIGIN`
-
-**RED FLAGS:**
-```xml
-<!-- Missing X-Frame-Options -->
-<!-- Misaligned with CSP frame-ancestors -->
-<!-- Using deprecated ALLOW-FROM (not supported in modern browsers) -->
-<add name="X-Frame-Options" value="ALLOW-FROM https://example.com" />
-```
+`DENY` or `SAMEORIGIN`, aligned with CSP `frame-ancestors` (`'none'` ↔ `DENY`, `'self'` ↔ `SAMEORIGIN`); `ALLOW-FROM` is deprecated and ignored by browsers. Missing or misaligned while `frame-ancestors` is present = Low.
 
 ## 5. HTTP Strict Transport Security (HSTS)
-
-**Purpose**: Enforces HTTPS connections
 
 **GOOD configuration:**
 ```xml
@@ -196,84 +122,21 @@ app.UseEntryHttps();
 If the project uses the `Enigmatry.Entry` HTTPS helpers, verify the effective HSTS value on the live URL or in the package source; do not assume it meets the one-year `max-age` / `includeSubDomains` minimum. On `linux` hosting (no `web.config`) the equivalent is `builder.Services.AddHsts(o => { o.MaxAge = TimeSpan.FromDays(365); o.IncludeSubDomains = true; })` with `app.UseHsts()`.
 
 **Other sources that count as configured (read them before concluding HSTS is missing):**
-- `app.UseHsts()` without `AddHsts(options => ...)` defaults to a 30-day `max-age` without `includeSubDomains` (existing High row); the options must set both
+- `app.UseHsts()` without `AddHsts(options => ...)` defaults to a 30-day `max-age` without `includeSubDomains` (High per section 12); the options must set both
 - IIS 10 (1709+) native `<hsts enabled="true" max-age="31536000" includeSubDomains="true" />` under `<site>` in `applicationHost.config` or `web.config`
 - `NetEscapades.AspNetCore.SecurityHeaders` (`AddSecurityHeaderPolicies`, `UseSecurityHeaders`) emits HSTS, CSP and the other headers from a policy object; read the policy instead of grepping for header names
 
-**RED FLAGS:**
-```xml
-<!-- Missing HSTS -->
-<!-- Too short max-age -->
-<add name="Strict-Transport-Security" value="max-age=3600" />
-<!-- Missing includeSubDomains -->
-<add name="Strict-Transport-Security" value="max-age=31536000" />
-```
-
 ## 6. X-Content-Type-Options
 
-**Purpose**: Prevents MIME-sniffing attacks
-
-**GOOD configuration:**
-```xml
-<add name="X-Content-Type-Options" value="nosniff" />
-```
-
-**RED FLAGS:**
-```xml
-<!-- Missing X-Content-Type-Options -->
-<!-- Wrong value -->
-<add name="X-Content-Type-Options" value="sniff" />
-```
+`X-Content-Type-Options: nosniff` on every response; missing or any other value = Medium.
 
 ## 7. Referrer-Policy
 
-**Purpose**: Controls referrer information in requests
-
-**GOOD configuration:**
-```xml
-<!-- Most secure - no referrer information -->
-<add name="Referrer-Policy" value="no-referrer" />
-
-<!-- Balanced - send to same origin only -->
-<add name="Referrer-Policy" value="same-origin" />
-
-<!-- Acceptable - origin only for cross-origin -->
-<add name="Referrer-Policy" value="strict-origin-when-cross-origin" />
-```
-
-**RED FLAGS:**
-```xml
-<!-- Missing Referrer-Policy -->
-<!-- Insecure policy -->
-<add name="Referrer-Policy" value="unsafe-url" />
-<add name="Referrer-Policy" value="no-referrer-when-downgrade" />
-```
-
-A missing `Referrer-Policy` is Low: every current browser defaults to `strict-origin-when-cross-origin`. An explicit insecure value (`unsafe-url`, `no-referrer-when-downgrade`) is Medium.
+Acceptable values: `no-referrer`, `same-origin`, `strict-origin-when-cross-origin`. A missing `Referrer-Policy` is Low: every current browser defaults to `strict-origin-when-cross-origin`. An explicit insecure value (`unsafe-url`, `no-referrer-when-downgrade`) is Medium.
 
 ## 8. Cross-Origin Resource Sharing (CORS)
 
-**Check CORS configuration in web.config or ASP.NET Core:**
-
-**web.config:**
-```xml
-<httpProtocol>
-  <customHeaders>
-    <!-- REVIEW - should be specific, not * -->
-    <add name="Access-Control-Allow-Origin" value="https://trusted-domain.com" />
-  </customHeaders>
-</httpProtocol>
-```
-
-**RED FLAGS:**
-```xml
-<!-- Too permissive -->
-<add name="Access-Control-Allow-Origin" value="*" />
-<!-- With credentials allowed (dangerous combination) -->
-<add name="Access-Control-Allow-Credentials" value="true" />
-```
-
-**ASP.NET Core (preferred - check Startup.cs/Program.cs):**
+Check `AddCors` policies in `Program.cs` / `Startup.cs` (or `Access-Control-Allow-*` custom headers in `web.config`): origins must be explicit; `AllowAnyOrigin()` or `*` combined with `AllowCredentials()` = Medium.
 ```csharp
 services.AddCors(options =>
 {
@@ -289,30 +152,7 @@ services.AddCors(options =>
 
 ## 9. Subresource Integrity (SRI)
 
-**Check Angular index.html for external resources:**
-
-**GOOD - Using SRI for CDN resources:**
-```html
-<script src="https://cdn.example.com/library.js" 
-        integrity="sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/ux..." 
-        crossorigin="anonymous"></script>
-
-<link rel="stylesheet" 
-      href="https://cdn.example.com/styles.css" 
-      integrity="sha384-..." 
-      crossorigin="anonymous">
-```
-
-**RED FLAGS:**
-```html
-<!-- Missing integrity for CDN resources -->
-<script src="https://cdn.example.com/library.js"></script>
-<link rel="stylesheet" href="https://cdn.example.com/styles.css">
-```
-
-**Files to check:**
-- `src/index.html`
-- Any templates loading external resources
+Every external `<script>` / `<link>` in `src/index.html` (or any template loading a CDN resource) needs `integrity="sha384-..."` and `crossorigin="anonymous"`; a CDN resource without SRI = Medium.
 
 ## 10. API Security Headers (Backend)
 
@@ -355,30 +195,13 @@ app.Use(async (context, next) =>
 
 **One source per header:** `IHeaderDictionary.Add` throws on a duplicate key (analyzer ASP0019), so samples use `Append` or the indexer. When `web.config` `customHeaders` and middleware (or a library) both set the same header, IIS appends a second copy: two CSP headers are enforced as their intersection and two HSTS headers take the first. Exactly one source per header is expected; the same header emitted twice on the live response = Medium.
 
-### API-Specific Headers:
-
-**1. Cache-Control: no-store** (MUST for APIs)
-- Prevents caching of sensitive API responses
-- Protects against information disclosure
-
-**2. Content-Security-Policy: default-src 'none'; frame-ancestors 'none'**
-- Minimal CSP for APIs (no content rendering)
-
-**3. Permissions-Policy** (formerly Feature-Policy)
-- Disables browser features APIs don't need; minimum feature list `camera=(), microphone=(), geolocation=(), payment=()` (a shorter list = Medium)
-
-**4. Remaining OWASP baseline headers (front-end and API; each missing = Medium):**
-- `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none`
+**API-specific and remaining baseline headers:**
+- `Cache-Control: no-store` on API responses (missing = Medium)
+- `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` is the minimal CSP for an API that renders no content; a permissive CSP (`default-src *`) on an API = Medium
+- `Permissions-Policy` with at least `camera=(), microphone=(), geolocation=(), payment=()` (a shorter list = Medium)
+- `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none` on front-end and API (each missing = Medium)
 - `Cross-Origin-Embedder-Policy: require-corp` only where the app tolerates it (it blocks cross-origin resources that lack CORP/CORS); otherwise not a finding
 - `Clear-Site-Data: "cache","cookies","storage"` on the logout response (check the sign-out action, not the global header block)
-
-**RED FLAGS for APIs:**
-```xml
-<!-- Missing Cache-Control on API responses -->
-<!-- Permissive CSP on APIs -->
-<add name="Content-Security-Policy" value="default-src *" />
-<!-- Missing headers entirely -->
-```
 
 ## 11. Version-Disclosing Headers (Server, X-Powered-By, X-AspNet-Version)
 
@@ -420,54 +243,9 @@ On `linux` hosting `web.config` is ignored: the equivalent is `AddServerHeader =
 </configuration>
 ```
 
-**For legacy .NET Framework applications only (not expected on this stack), also add to web.config:**
-```xml
-<configuration>
-  <system.web>
-    <!-- Remove X-AspNet-Version header -->
-    <httpRuntime enableVersionHeader="false" />
-  </system.web>
-
-  <system.webServer>
-    <security>
-      <requestFiltering removeServerHeader="true" />
-    </security>
-
-    <httpProtocol>
-      <customHeaders>
-        <remove name="X-Powered-By" />
-        <remove name="X-AspNet-Version" />
-        <remove name="X-AspNetMvc-Version" />
-      </customHeaders>
-    </httpProtocol>
-  </system.webServer>
-</configuration>
-```
-
-**ASP.NET Core / Kestrel (Program.cs/Startup.cs):**
-```csharp
-var builder = WebApplication.CreateBuilder(args);
-
-// Configure Kestrel to remove Server header
-builder.WebHost.ConfigureKestrel(serverOptions =>
-{
-    serverOptions.AddServerHeader = false;
-});
-
-var app = builder.Build();
-app.Run();
-```
+**ASP.NET Core / Kestrel:** `builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false)` in `Program.cs`, or `"Kestrel": { "AddServerHeader": false }` in `appsettings.json`.
 
 > **Do not accept middleware that calls `Response.Headers.Remove("Server")` as a remediation.** Kestrel adds its `Server` header when the response starts, after middleware has run, so only `AddServerHeader = false` removes it. Under IIS (in-process or out-of-process) the `Server` and `X-Powered-By` headers are added by IIS after the ASP.NET Core pipeline completes, so application code cannot remove them; only `removeServerHeader="true"` on `<requestFiltering>` and `<remove name="X-Powered-By" />` under `<httpProtocol><customHeaders>` in `web.config` work. Report such middleware as a non-working remediation.
-
-**Alternative - appsettings.json configuration:**
-```json
-{
-  "Kestrel": {
-    "AddServerHeader": false
-  }
-}
-```
 
 ## 12. What to Report
 
@@ -489,19 +267,6 @@ app.Run();
 | `Server` (including one added by Front Door, Application Gateway or nginx), `X-Powered-By`, `X-AspNet-Version`, `X-AspNetMvc-Version`, `X-SourceFiles`, `SourceMap` / `X-SourceMap` present in a live production response, or an error page naming the platform (version information disclosure) | Low |
 | `Response.Headers.Remove("Server")` middleware used as the remediation for version-disclosing headers (non-working; see section 11) | Low |
 | Deprecated header present: `X-XSS-Protection` (OWASP: omit or `0`), `Expect-CT`, `Public-Key-Pins`, `Feature-Policy` (replaced by `Permissions-Policy`), `Report-To` (replaced by `Reporting-Endpoints`) | Low |
-
-**For each missing or misconfigured header:**
-
-**Report format:**
-```
-Finding: Missing/Misconfigured Security Header
-- Header: [Header name]
-- Location: web.config or Startup.cs/Program.cs
-- Current Value: [Current configuration or "Not configured"]
-- Issue: [What's wrong]
-- Risk: [Security risk]
-- Recommendation: [Correct configuration]
-```
 
 **Example report:**
 
@@ -591,18 +356,11 @@ autoCsp
 
 ## 14. Testing Security Headers
 
-**Manual verification:**
-
-1. **Browser DevTools:**
-   - Open Network tab
-   - Refresh page
-   - Click on document request (and an API call)
-   - Check Response Headers section; verify `Server` and `X-Powered-By` are absent
+1. **Browser DevTools:** Network tab, the document request and an API call; verify `Server` and `X-Powered-By` are absent.
 
 2. **Online tools:**
    - MDN HTTP Observatory: https://developer.mozilla.org/en-US/observatory — successor of Mozilla Observatory (`observatory.mozilla.org` moved to MDN in July 2024; do not cite the old host). New scoring model: maximum 145 points, bonus points only count from a base score of 90 or more. Source: https://developer.mozilla.org/en-US/blog/mdn-observatory
    - https://securityheaders.com — second tool, for a cross-check of the header grade
-   - Enter your URL for automated analysis
 
 3. **Command line (curl):**
    ```bash
@@ -613,8 +371,3 @@ autoCsp
    curl -I https://api.your-app.com/api/endpoint | grep -i "server\|powered"
    ```
    PowerShell: `Invoke-WebRequest -Uri "https://your-app.com" -Method Head | Select-Object -ExpandProperty Headers` and look for `Server` or `X-Powered-By` in the output.
-
-4. **Verify CSP:**
-   - Check browser console for CSP violations
-   - Test that inline scripts are blocked
-   - Verify frame-ancestors prevents framing

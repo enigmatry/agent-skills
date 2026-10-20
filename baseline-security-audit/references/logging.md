@@ -16,13 +16,6 @@ Verify that all unhandled exceptions are captured and logged with complete stack
 
 See check 4 (exception_handling.md) for whether a global handler exists and for exception details in HTTP responses. This check reports only the sink side: exceptions that reach no configured sink, or `LogError(message)` calls that drop the exception object. Severity when exceptions are not logged at all = High.
 
-**Check for:**
-- Global exception handling middleware (`UseExceptionHandler`, custom middleware)
-- Exception filter attributes (`ExceptionFilterAttribute` implementations)
-- Proper registration in `Startup.cs` or `Program.cs`
-- `logger.LogError(exception, message)` calls that include the exception object
-- Coverage for both API controllers and general application exceptions
-
 **Search patterns:**
 - `UseExceptionHandler`, `AddExceptionHandler<T>()`, `IExceptionHandler` (.NET 8+), `AddProblemDetails()`
 - `ExceptionFilterAttribute`, `IExceptionFilter`, `OnException`, `HandleException`, `GlobalException`
@@ -155,13 +148,6 @@ See check 6 (sensitive_query_strings.md) for query-string values in access logs 
 - Sensitive data in plain text in log outputs
 - Missing sanitization before logging user inputs
 - Log injection: `LogInformation($"User {name} logged in")` — string interpolation instead of a message template lets user input forge log lines (CRLF) and breaks structured logging (Sonar S6670); interpolated user input in a log call = Low
-
-### 4.8 Compliance and Regulatory Concerns
-
-- GDPR violations through excessive personal data logging
-- PCI DSS violations with payment card data in logs
-- HIPAA violations with health information in logs
-- Financial regulation requirements not met through transaction logging
 
 ## 5. Files and Search Patterns
 

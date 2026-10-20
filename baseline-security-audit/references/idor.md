@@ -57,19 +57,11 @@ return await context.Orders.Where(o => ids.Contains(o.Id)).ToListAsync();
 - **Repository patterns**: Generic repositories lacking built-in ownership enforcement
 - **Service layer**: Business logic that does not validate resource ownership before returning data
 
-## 7. Common Vulnerable Scenarios
-
-- User profile: `/users/{id}` without confirming the `id` matches the authenticated user
-- Documents: `/documents/{id}` without verifying the user has permission
-- Orders: `/orders/{id}` accessible by any authenticated user, not just the owner
-- Admin functions: `/admin/users/{id}` without tenant-scoped role validation
-- API keys: `/api-keys/{id}` without confirming the key belongs to the caller
-
 ## What to Report
 
 For each finding, provide:
 - **File** and line number
 - **Endpoint or method** where the unchecked access occurs
 - **ID parameter** used (route, query string, or body)
-- **Risk**: Critical (resource reachable without authentication, or cross-tenant access to sensitive data from low-privilege input) / High (another user's or tenant's data accessible to an authenticated caller without an ownership check, including admin endpoints that do not scope to the admin's tenant,) / Medium (ownership check present but with gaps that need another weakness to exploit) / Low (internal identifiers exposed but every access path is scoped; hygiene only)
+- **Risk**: Critical (resource reachable without authentication, or cross-tenant access to sensitive data from low-privilege input) / High (another user's or tenant's data accessible to an authenticated caller without an ownership check, including admin endpoints that do not scope to the admin's tenant) / Medium (ownership check present but with gaps that need another weakness to exploit) / Low (internal identifiers exposed but every access path is scoped; hygiene only)
 - **Recommendation**: resource-based authorization check or ownership filter to apply

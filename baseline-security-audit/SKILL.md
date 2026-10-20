@@ -183,6 +183,8 @@ Store the result as `HOSTING_MODEL` and do **not** ask again.
 
 **Scope once.** Before the first check, list what will be audited: every deployable project (`*.csproj` of web apps, APIs and workers; every `angular.json` project), the pipeline files (`azure-pipelines*.yml`, `**/*.yml` under a pipelines folder), infrastructure (`*.bicep`, `*.parameters.json`), and `nuget.config` / `package.json`. In a monorepo cover every deployable project; name any folder you deliberately leave out (samples, archived code, generated code). Reuse this list for every check.
 
+**Infrastructure repository.** The shared Bicep files for all projects live in `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`; clone it with git and ask the user once for the project folder (e.g. `/tenants/enigmatry/projects/my-project`). Checks 1, 16 and 17 read the Key Vault, App Service and SQL definitions from that folder.
+
 **For each check in `SELECTED_CHECKS`, in numeric order:**
 
 1. **Read the check's reference file in full** before searching. The file states what to look for, what counts as a finding, the severity of each finding and the remediation; do not work from the check's one-line description.
