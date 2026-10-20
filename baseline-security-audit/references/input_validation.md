@@ -134,8 +134,8 @@ Source: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis/
 - Risk level: High / Medium / Low per the Risk Assessment below
 
 **Risk Assessment:**
-- **High**: No server-side validation on an input that reaches a database, file system, external call or authorization decision
-- **Medium**: Other missing server-side validation
+- **High**: No server-side validation on an input that reaches a file system path, an outbound call, an authorization decision or a raw query, or that controls result size (an unbounded page size that disables paging)
+- **Medium**: Other missing server-side validation, including missing length and format rules on values that are stored or used as parameterized filters
 - Client-side validation is a user-experience concern: its absence is not a finding, and on its own it never counts as validation (an input validated only in Angular is rated as missing server-side validation, High or Medium above). A sort column passed to Dynamic LINQ needs no allow-list (check 3 (sql_injection.md) section 4)
 
 ## 7. Search Patterns

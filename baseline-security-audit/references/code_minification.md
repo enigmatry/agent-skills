@@ -36,7 +36,7 @@ Analyze the codebase to identify missing minification/uglification configuration
 - A finding is an **explicit** `"optimization": false` or `"sourceMap": true` in the configuration that the pipeline deploys
 - `"sourceMap": { "scripts": true, "hidden": true, "vendor": false, "sourcesContent": false }` is compliant when the `.map` files are kept server-side (error-tracking upload) and not published
 - Webpack builder only: check `buildOptimizer` is `true`
-- Check `defaultConfiguration` (defaults to `production` since Angular 12, so a bare `ng build` is not a finding) and the configuration the pipeline actually passes to `ng build`; `ng build --configuration development` deployed = Low
+- Check `defaultConfiguration` on the build target and the configuration the pipeline actually passes to `ng build`. New projects are scaffolded with `"defaultConfiguration": "production"` since Angular 12, but there is no built-in fallback: without the key, a bare `ng build` uses the base options. `ng build --configuration development` deployed = Low; `defaultConfiguration` absent while the base options enable `sourceMap` or disable `optimization` = Low, and ask the user which configuration the pipeline passes
 
 **Files to check:** `angular.json`, build scripts in `package.json`, `webpack.config.js` / `vite.config.*` for non-Angular bundlers, the pipeline YAML for the deployed configuration, and the `dist/` output.
 
