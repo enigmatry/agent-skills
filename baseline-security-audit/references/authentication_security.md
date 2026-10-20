@@ -180,8 +180,8 @@ var app = ConfidentialClientApplicationBuilder.Create(clientId)
 var result = await app.AcquireTokenForClient(scopes).ExecuteAsync(); // or Microsoft.Identity.Web ITokenAcquisition.GetAccessTokenForAppAsync
 ```
 
-**Workload identity federation (preferred over client secrets for app-to-app and pipeline authentication):** federated identity credentials on the app registration let Azure DevOps service connections (workload identity federation) and GitHub Actions (OIDC via `azure/login`) obtain tokens without any stored secret. Check pipeline YAML and service-connection definitions for secret-based `AzureRM` connections and for `AZURE_CLIENT_SECRET` / `clientSecret` variables. `ClientSecret` used where federation or managed identity is possible = Medium.
-Source: https://devblogs.microsoft.com/devops/public-preview-of-workload-identity-federation-for-azure-pipelines
+**Workload identity federation (preferred over client secrets for app-to-app and pipeline authentication):** federated identity credentials on the app registration let Azure DevOps service connections (workload identity federation) and GitHub Actions (OIDC via `azure/login`) obtain tokens without any stored secret. Check pipeline YAML and service-connection definitions for secret-based `AzureRM` connections and for `AZURE_CLIENT_SECRET` / `clientSecret` variables. `ClientSecret` used where federation or managed identity is possible = Medium; recommend a tenant app management policy that blocks `passwordAddition` and caps `passwordLifetime` so no new secrets can be added to app registrations.
+Sources: https://devblogs.microsoft.com/devops/public-preview-of-workload-identity-federation-for-azure-pipelines , https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-app-management-policies
 
 **RED FLAGS:**
 ```csharp
@@ -193,11 +193,7 @@ client.DefaultRequestHeaders.Authorization =
 httpClient.DefaultRequestHeaders.Add("X-Api-Key", "hardcoded-or-config-key");
 
 // BAD — Client secret instead of certificate or managed identity
-options.ClientSecret = "...";  // secrets can leak; certificates or managed identities are preferred
-
-// LOW — DefaultAzureCredential in production code (Microsoft advises against it outside local development)
-var credential = new DefaultAzureCredential();
-```
+options.ClientSecret = "...";  // secrets can leak; certificates or managed identities are preferred```
 
 **Search for:**
 - `BasicAuthentication`, `Basic ` in authorization headers
@@ -247,18 +243,7 @@ builder.Services.AddAuthorizationBuilder()
 - `AddPolicy` definitions that call only `RequireAuthenticatedUser()` — these add no value over the global fallback policy
 - `Roles = "..."` strings — collect the distinct role names for question 4 in section 6; whether they exist in the identity provider cannot be verified from code
 
-**Angular route guards — check alignment with backend roles:**
-```typescript
-// GOOD — Angular guard checks the same role the backend enforces
-canActivate(): boolean {
-  return this.authService.hasRole('Admin');
-}
-
-// BAD — route guard allows access but backend rejects the call (misleading UX, not a security bypass)
-// BAD — no route guard on admin routes (user reaches the page, then sees an error)
-```
-
-**Note:** Angular route guards are a UX concern, not a security boundary. The backend must always enforce authorization independently. Missing or mismatched Angular guards are a Low-severity finding.
+**Angular route guards** (`canActivate` checking `hasRole(...)`) are a UX concern, not a security boundary. The backend must always enforce authorization independently. Missing or mismatched Angular guards are a Low-severity finding.
 
 **RED FLAGS (severity per finding):**
 - Endpoint without any authorization that exposes data or actions — Critical

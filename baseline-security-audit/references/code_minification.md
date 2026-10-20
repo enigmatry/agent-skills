@@ -36,141 +36,23 @@ Analyze the codebase to identify missing minification/uglification configuration
 - A finding is an **explicit** `"optimization": false` or `"sourceMap": true` in the configuration that the pipeline deploys
 - `"sourceMap": { "scripts": true, "hidden": true, "vendor": false, "sourcesContent": false }` is compliant when the `.map` files are kept server-side (error-tracking upload) and not published
 - Webpack builder only: check `buildOptimizer` is `true`
-- Check `defaultConfiguration` (defaults to `production` since Angular 12) and the configuration the pipeline actually passes to `ng build`
+- Check `defaultConfiguration` (defaults to `production` since Angular 12, so a bare `ng build` is not a finding) and the configuration the pipeline actually passes to `ng build`; `ng build --configuration development` deployed = Low
 
-**Detailed optimization configuration:**
-```json
-"optimization": {
-  "scripts": true,     // Minify JavaScript
-  "styles": true,      // Minify CSS
-  "fonts": true        // Inline small fonts
-}
-```
-
-**Files to check:**
-- `angular.json` - Main configuration file
-- Build scripts in `package.json`
+**Files to check:** `angular.json`, build scripts in `package.json`, `webpack.config.js` / `vite.config.*` for non-Angular bundlers, the pipeline YAML for the deployed configuration, and the `dist/` output.
 
 ## 2. CSS/SCSS Minification
 
-**CSS preprocessor configurations:**
-
-**PostCSS:**
-```javascript
-// postcss.config.js
-module.exports = {
-  plugins: [
-    require('cssnano')({  // CSS minification
-      preset: ['default', {
-        discardComments: {
-          removeAll: true  // Remove all comments
-        }
-      }]
-    })
-  ]
-}
-```
-
-**Webpack CSS loaders:**
-```javascript
-// webpack.config.js
-module.exports = {
-  module: {
-    rules: [
-      {
-        test: /\.css$/,
-        use: [
-          MiniCssExtractPlugin.loader,
-          'css-loader',
-          'postcss-loader'  // For minification
-        ]
-      },
-      {
-        test: /\.scss$/,
-        use: [
-          MiniCssExtractPlugin.loader,
-          'css-loader',
-          'postcss-loader',
-          'sass-loader'
-        ]
-      }
-    ]
-  },
-  plugins: [
-    new MiniCssExtractPlugin({
-      filename: '[name].[contenthash].css'
-    })
-  ]
-}
-```
-
-**SASS/SCSS build configurations:**
-```json
-// package.json
-"scripts": {
-  "build:css": "sass --style=compressed src/styles:dist/styles"
-}
-```
+Angular `optimization: true` minifies styles together with the scripts. For a non-Angular bundler check its CSS minifier (`cssnano` in `postcss.config.js`, `MiniCssExtractPlugin` with `postcss-loader` in webpack, `sass --style=compressed`).
 
 ## 3. Third-Party JavaScript and CSS Files
 
-**Critical checks for third-party resources:**
+**Third-party resources loaded from a CDN** (`<script>` / `<link>` in `index.html` without `integrity` and `crossorigin`) are rated by check 14 (security_headers.md) section 9. Here: `"subresourceIntegrity": true` in the Angular build options hashes the app's own bundles (recommendation, not a finding).
 
-**Third-party resources loaded from a CDN:** every external `<script>`/`<link>` in `index.html` needs `integrity` and `crossorigin` attributes, or the dependency is bundled instead (Angular: `"subresourceIntegrity": true` in the build options hashes its own bundles); a CDN resource without SRI = Medium. See check 14 (security_headers.md) section 9.
-
-**Check package.json dependencies:**
-- Verify production builds use minified versions from CDNs
-- Check if build process includes third-party files in bundling
-- Ensure third-party files are processed by build optimization
-
-**Bundled third-party libraries:**
-```javascript
-// Verify third-party code is included in bundle optimization
-// Check node_modules processing in webpack/vite config
-module.exports = {
-  optimization: {
-    minimize: true,
-    minimizer: [
-      new TerserPlugin({
-        exclude: /node_modules/  // RED FLAG - excludes libraries
-      })
-    ]
-  }
-}
-
-// CORRECT - includes all code
-module.exports = {
-  optimization: {
-    minimize: true,
-    minimizer: [new TerserPlugin()]
-  }
-}
-```
-
-**Files to check:**
-- `index.html` - CDN script/style references
-- `public/` folder - Static third-party files
-- Build output directory - Verify files are minified
+A bundler minifier that excludes `node_modules` (`new TerserPlugin({ exclude: /node_modules/ })`) ships vendor code unminified (Low). **Files to check:** `index.html`, `public/`, the build output.
 
 ## 4. Build Script Verification
 
-**Check package.json build scripts:**
-
-```json
-{
-  "scripts": {
-    "build": "ng build --configuration production",  // Angular
-    "build": "vite build",                            // Vite
-    "build": "webpack --mode production"              // Webpack
-  }
-}
-```
-
-**Flags to raise:**
-- Build scripts missing production flags
-- Development builds being deployed
-- Missing or incorrect build configurations
-- Build scripts that explicitly disable minification
+A deployed build script without the production flag (`ng build --configuration development`, `webpack` without `--mode production`) or one that disables minification (`optimization: { minimize: false }`) = Low.
 
 ## 5. Server-Side Rendering (SSR) and Static Site Generation (SSG)
 
@@ -180,55 +62,15 @@ module.exports = {
 
 ## 6. HTML Minification
 
-**Check for HTML minification in build process:**
-
-**Angular:**
-- HTML minification is included in `optimization: true`
+Angular includes HTML minification in `optimization: true`; nothing separate to check.
 
 ## 7. Source Maps in Production
 
-**Critical security check - source maps expose source code:**
-
-```javascript
-// webpack.config.js
-module.exports = {
-  devtool: false  // MUST be false or undefined for production
-  // OR
-  devtool: 'hidden-source-map'  // Only if source maps needed for error tracking
-}
-
-// angular.json
-"sourceMap": false  // MUST be false for production
-
-// vite.config.js
-export default defineConfig({
-  build: {
-    sourcemap: false  // MUST be false for production
-  }
-})
-```
-
-**If source maps are needed for error tracking:**
-- Use `hidden-source-map` to keep maps separate
-- Upload source maps to error tracking service (Sentry, etc.)
-- Do NOT serve source maps publicly
-- Store source maps securely on the server only
+Production builds must not emit public source maps: `angular.json` `"sourceMap": false` (or the hidden form from section 1), webpack `devtool: false` or `'hidden-source-map'`, vite `build.sourcemap: false`. Maps needed for error tracking are uploaded to the tracking service and never served.
 
 **Deployed `.map` files (executable check):** look for pipeline publish/copy steps (`CopyFiles@2`, `PublishPipelineArtifact@1`, `AzureWebApp@1`) whose `contents` include `*.map` or lack a `!**/*.map` exclusion; an IIS `web.config` without `<requestFiltering><fileExtensions><add fileExtension=".map" allowed="false" /></fileExtensions></requestFiltering>`; `//# sourceMappingURL=` comments in the deployed bundles (`grep -r "sourceMappingURL" dist/`); and a `curl -sI "$PRODUCTION_URL/<bundle>.js.map"` that returns 200. A publicly reachable `.map` is rated in section 8 (Medium).
 
 ## 8. What to Report
-
-**Report ALL instances of (Medium for publicly served source maps, Low for everything else):**
-- Missing or disabled minification in production builds
-- `optimization: false` in production configurations
-- Source maps enabled in production builds
-- Development versions of third-party libraries in production
-- Build scripts without production flags
-- Unminified CSS/SCSS in production output
-- Unminified JavaScript/TypeScript in production output
-- HTML files without minification
-- Third-party files excluded from build optimization
-- `debugger;` statements and comments in production bundles (`console.log` presence on its own is not a finding)
 
 **For each finding, provide:**
 - File path and configuration setting
@@ -239,106 +81,5 @@ export default defineConfig({
 
 **Severity:**
 - **Medium**: Source maps publicly accessible — `.map` files served from the production origin, or a `//# sourceMappingURL=` comment pointing at a reachable file (exposes source code)
-- **Low**: everything else in the list above (missing minification, `debugger;` statements, comments, development versions of third-party libraries, build scripts without production flags)
+- **Low**: everything else: missing or disabled minification, a development configuration deployed, `debugger;` statements and comments in production bundles (`console.log` presence on its own is not a finding), unminified third-party or vendor code, build scripts without production flags
 - Not reported: suboptimal configuration with only a performance impact
-
-## 9. Files and Directories to Check
-
-**Configuration files:**
-- `angular.json` - Angular projects
-- `webpack.config.js` - Webpack configurations
-- `vite.config.js` / `vite.config.ts` - Vite projects
-- `postcss.config.js` - CSS processing
-- `package.json` - Build scripts
-- `.env.production` - Production environment variables
-
-**Build output directories to verify:**
-- `dist/` - Common build output
-- `public/` - Static files (check for unminified third-party files)
-
-## 10. Verification Steps
-
-**Manual verification of production build:**
-
-1. **Run production build:**
-   ```bash
-   npm run build
-   # or
-   ng build --configuration production
-   ```
-
-2. **Inspect output files:**
-   - Check file sizes (minified files are significantly smaller)
-   - Open files and verify they are minified (no whitespace, short variable names)
-   - Verify no source maps are present (`.map` files)
-
-3. **Check for comments and debugging:**
-   - Check for `debugger;` statements (a finding; `console.log` presence on its own is not)
-   - Look for code comments
-
-4. **Verify third-party libraries:**
-   - Check if using `.min.js` versions
-   - Verify third-party code is included in bundle optimization
-
-## 11. Best Practices
-
-**Verify that the application:**
-- Has separate development and production build configurations
-- Minifies all JavaScript/TypeScript code in production
-- Minifies all CSS/SCSS code in production
-- Minifies HTML templates in production
-- Disables source maps in production (or uses hidden source maps)
-- Uses minified versions of third-party libraries
-- Removes `debugger;` statements
-- Removes comments from production code
-- Uses content hashing for cache busting
-- Optimizes images and other assets
-- Uses tree-shaking to remove unused code
-- Implements code splitting for better performance
-
-**Security benefits of minification:**
-- Makes reverse engineering more difficult
-- Removes comments that may contain sensitive information
-- Obscures variable and function names
-- Removes `debugger;` statements and debug-only code
-- Reduces file size and improves performance
-- Provides security through obscurity (not primary defense, but helpful)
-
-**Important note:**
-- Minification is NOT a security feature, it's security through obscurity
-- Never rely on minification alone to protect sensitive logic
-- Always implement proper server-side security controls
-- Keep sensitive logic and secrets on the server side
-- Use minification as one layer of defense-in-depth
-
-## 12. Common Misconfigurations
-
-**Watch out for:**
-
-```javascript
-// WRONG - Minification explicitly disabled
-optimization: { minimize: false }
-
-// WRONG - Development build deployed to production
-ng build --configuration development
-// NOTE: a bare `ng build` has used the production configuration by default since Angular 12 and is NOT a finding
-
-// WRONG - Source maps in production
-devtool: 'source-map'
-
-// CORRECT - No source maps in production
-devtool: false
-```
-
-**Environment-specific builds:**
-```json
-// Verify environment variables
-{
-  "scripts": {
-    "build:dev": "ng build --configuration development",
-    "build:prod": "ng build --configuration production",
-    "build": "ng build"  // production by default since Angular 12
-  }
-}
-```
-

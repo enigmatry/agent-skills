@@ -12,40 +12,14 @@ Analyze the codebase to verify that sensitive fields stored in the database are 
 
 Search entity classes and DTOs for fields that should never be readable in plain text:
 
-**High-sensitivity fields that must be encrypted:**
-```csharp
-// Identity and government identifiers
-public string SocialSecurityNumber { get; set; }
-public string Bsn { get; set; }                    // BurgerServiceNummer (NL)
-public string NationalId { get; set; }
-public string PassportNumber { get; set; }
-public string DriverLicenseNumber { get; set; }
-public string TaxId { get; set; }
+**Fields that must be encrypted** (the full property-name list is in check 11 (data_minimization.md) section 7): government identifiers (`SocialSecurityNumber`, `Bsn`, `NationalId`, `PassportNumber`, `DriverLicenseNumber`, `TaxId`), payment data (`CreditCardNumber`, `BankAccountNumber`, `IBAN`, `RoutingNumber`), medical and biometric data (`MedicalRecordNumber`, `Diagnosis`, `BiometricData`).
 
-// Payment data
-public string CreditCardNumber { get; set; }
-public string BankAccountNumber { get; set; }
-public string IBAN { get; set; }
-public string RoutingNumber { get; set; }
-public string CardVerificationCode { get; set; }   // CRITICAL: must NOT be stored at all (see note below)
-
-// NOTE: PCI DSS v4.0.1 requirement 3.3.1 forbids storing sensitive authentication data
-// (CVV/CVC, full track data, PIN) after authorisation, even encrypted. A CVV column is a
-// CRITICAL "remove" finding, not an encryption finding. Full PANs should be tokenised via
-// the payment service provider rather than stored.
-
-// Medical and biometric data
-public string MedicalRecordNumber { get; set; }
-public string Diagnosis { get; set; }
-public byte[] BiometricData { get; set; }
-```
+**PCI DSS v4.0.1 requirement 3.3.1** forbids storing sensitive authentication data (CVV/CVC, full track data, PIN) after authorisation, even encrypted: a `CardVerificationCode` column is a Critical "remove" finding, not an encryption finding. Full PANs should be tokenised by the payment service provider rather than stored.
 
 **Files to examine:**
 - `Models/`, `Entities/`, `Domain/` — entity class definitions
 - `*DbContext.cs` — which entities are mapped
 - `Migrations/*.cs` — to see column types and names added over time
-
-**Note:** Passwords must be *hashed*, not encrypted; they are out of scope here.
 
 ## 2. SQL Server Always Encrypted
 
@@ -89,16 +63,6 @@ modelBuilder.Entity<Customer>()
         v => encryptionService.Decrypt(v));
 ```
 
-**GOOD — Dedicated encrypted value type:**
-```csharp
-public class EncryptedString
-{
-    private readonly string _cipherText;
-    public EncryptedString(string cipherText) => _cipherText = cipherText;
-    public string Decrypt(IEncryptionService svc) => svc.Decrypt(_cipherText);
-}
-```
-
 **RED FLAGS:**
 - Sensitive fields stored and retrieved without any call to an encryption or decryption service
 - Encryption called only on some code paths (e.g. only during writes but not verified on reads)
@@ -108,38 +72,17 @@ public class EncryptedString
 
 The .NET Data Protection API (`IDataProtector`) is suitable for encrypting short-lived or per-application sensitive values.
 
-**GOOD — Data Protection for field-level encryption:**
-```csharp
-public class SensitiveDataService
-{
-    private readonly IDataProtector _protector;
-
-    public SensitiveDataService(IDataProtectionProvider provider)
-    {
-        _protector = provider.CreateProtector("SensitiveFields.v1");
-    }
-
-    public string Protect(string plainText) => _protector.Protect(plainText);
-    public string Unprotect(string cipherText) => _protector.Unprotect(cipherText);
-}
-```
+Pattern: `IDataProtectionProvider.CreateProtector("SensitiveFields.v1")` with `Protect` / `Unprotect` around the sensitive value.
 
 **RED FLAGS:**
-- `IDataProtector` used but keys not persisted (data becomes unreadable after app restart)
+- Key ring not persisted to a shared store (rated by check 13 (cryptography_security.md) section 5)
 - Purpose string changed across deployments (breaks decryption of existing data)
 
 ## 5. Encryption Key Management
 
 Encryption is only as strong as the protection of its keys.
 
-**GOOD:**
-```csharp
-// Key retrieved from Azure Key Vault at runtime
-var keyBytes = await keyVaultClient.GetSecretAsync("FieldEncryptionKey");
-```
-
-**Check for:**
-- No key rotation strategy in place
+Keys belong in Azure Key Vault (or, for Always Encrypted, a column master key in Key Vault); check for a rotation strategy.
 
 Report missing key-rotation evidence for the column-encryption key as Low; hard-coded or static keys are reported by check 13 (cryptography_security.md).
 
@@ -158,7 +101,7 @@ resource tde 'Microsoft.Sql/servers/databases/transparentDataEncryption@2021-11-
 }
 ```
 
-**Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`. Look only at the folder or module that corresponds to the project currently being audited (ask the user for the project/folder name if unclear). Check there for Azure SQL database definitions.
+Check the Azure SQL database definitions in the project's module of the infrastructure repository (SKILL.md Step 1).
 
 **Search for:**
 - `state: 'Disabled'` in a `Microsoft.Sql/servers/databases/transparentDataEncryption` resource (or an inline `transparentDataEncryption` property in older templates) in Bicep files

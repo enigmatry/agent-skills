@@ -12,64 +12,7 @@ Analyze the application to ensure only necessary HTTP verbs are allowed, reducin
 
 ## 1. What to Check
 
-### Step 1: Identify Used HTTP Verbs
-
-**Examine all API controllers to find which HTTP verbs are used:**
-
-**ASP.NET Core Controllers:**
-```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class UsersController : ControllerBase
-{
-    [HttpGet]                    // GET verb used
-    public IActionResult GetAll() { }
-    
-    [HttpGet("{id}")]           // GET verb used
-    public IActionResult GetById(int id) { }
-    
-    [HttpPost]                  // POST verb used
-    public IActionResult Create([FromBody] User user) { }
-    
-    [HttpPut("{id}")]           // PUT verb used
-    public IActionResult Update(int id, [FromBody] User user) { }
-    
-    [HttpDelete("{id}")]        // DELETE verb used
-    public IActionResult Delete(int id) { }
-    
-    [HttpPatch("{id}")]         // PATCH verb used
-    public IActionResult Patch(int id, [FromBody] JsonPatchDocument patch) { }
-}
-```
-
-**ASP.NET MVC/Web API Controllers** — legacy (.NET Framework), not expected on this stack:
-```csharp
-public class ProductsController : ApiController
-{
-    [HttpGet]                   // GET verb used
-    public IHttpActionResult GetProducts() { }
-    
-    [HttpPost]                  // POST verb used
-    public IHttpActionResult CreateProduct(Product product) { }
-    
-    [HttpPut]                   // PUT verb used
-    public IHttpActionResult UpdateProduct(int id, Product product) { }
-    
-    [HttpDelete]                // DELETE verb used
-    public IHttpActionResult DeleteProduct(int id) { }
-}
-```
-
-**Search for HTTP verb attributes:**
-```csharp
-[HttpGet]
-[HttpPost]
-[HttpPut]
-[HttpDelete]
-[HttpPatch]
-[HttpHead]
-[HttpOptions]
-```
+Inventory the verbs from `[HttpGet]` / `[HttpPost]` / `[HttpPut]` / `[HttpDelete]` / `[HttpPatch]` / `[HttpHead]` / `[HttpOptions]` and `[AcceptVerbs]` on controller actions, plus minimal-API and non-controller endpoints (`Map*`; section 7 patterns). Legacy .NET Framework Web API controllers (`ApiController`, `IHttpActionResult`) use the same attributes but are not expected on this stack.
 
 **Common verbs used in typical REST APIs:**
 - **GET** - Retrieve resources (almost always used)
@@ -92,10 +35,6 @@ public class ProductsController : ApiController
 - **MOVE** - WebDAV verb
 - **LOCK** - WebDAV verb
 - **UNLOCK** - WebDAV verb
-
-### Step 2: Whitelist Only Used Verbs in web.config
-
-**After identifying used verbs, configure web.config to allow only those verbs.**
 
 ## 2. web.config Configuration
 
@@ -127,91 +66,15 @@ On `linux` hosting `<requestFiltering>` is ignored; the equivalent is a method-f
 - `allowUnlisted="false"` - Critical! Blocks all verbs not explicitly allowed
 - Only list verbs that are actually used in controllers
 
-**Example: Only GET and POST are used:**
-```xml
-<requestFiltering>
-  <verbs allowUnlisted="false">
-    <add verb="GET" allowed="true" />
-    <add verb="POST" allowed="true" />
-    <add verb="OPTIONS" allowed="true" />  <!-- For CORS if needed -->
-  </verbs>
-</requestFiltering>
-```
-
 ## 3. DEBUG Verb - Legacy Only
 
 **The DEBUG verb belongs to .NET Framework/ISAPI debugging. ASP.NET Core (AspNetCoreModuleV2, in-process or out-of-process) does not use it and Visual Studio does not need it. Do not recommend allowing DEBUG anywhere; the only check is that it is absent.** Absence of a `Web.Release.config` transform for DEBUG is **not** a finding on an ASP.NET Core project.
 
-The following examples are kept only for legacy .NET Framework projects that still carry the verb:
-
-### web.config (legacy .NET Framework development - allows DEBUG):
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <system.webServer>
-    <security>
-      <requestFiltering>
-        <verbs allowUnlisted="false">
-          <add verb="GET" allowed="true" />
-          <add verb="POST" allowed="true" />
-          <add verb="PUT" allowed="true" />
-          <add verb="DELETE" allowed="true" />
-          <add verb="OPTIONS" allowed="true" />
-          <add verb="DEBUG" allowed="true" />  <!-- legacy .NET Framework only; never on ASP.NET Core -->
-        </verbs>
-      </requestFiltering>
-    </security>
-  </system.webServer>
-</configuration>
-```
-
-### Web.Release.config (Production - blocks DEBUG):
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration xmlns:xdt="http://schemas.microsoft.com/XML-Document-Transform">
-  <system.webServer>
-    <security>
-      <requestFiltering>
-        <verbs xdt:Transform="Replace">
-          <add verb="GET" allowed="true" />
-          <add verb="POST" allowed="true" />
-          <add verb="PUT" allowed="true" />
-          <add verb="DELETE" allowed="true" />
-          <add verb="OPTIONS" allowed="true" />
-          <!-- DEBUG verb removed for production -->
-        </verbs>
-      </requestFiltering>
-    </security>
-  </system.webServer>
-</configuration>
-```
-
-**Alternative - Explicitly block DEBUG in release:**
-```xml
-<configuration xmlns:xdt="http://schemas.microsoft.com/XML-Document-Transform">
-  <system.webServer>
-    <security>
-      <requestFiltering>
-        <verbs>
-          <add verb="DEBUG" allowed="false" xdt:Transform="SetAttributes" xdt:Locator="Match(verb)" />
-        </verbs>
-      </requestFiltering>
-    </security>
-  </system.webServer>
-</configuration>
-```
+On a legacy .NET Framework project, verify that `Web.Release.config` removes DEBUG (`<verbs xdt:Transform="Replace">` without it, or `<add verb="DEBUG" allowed="false" xdt:Transform="SetAttributes" xdt:Locator="Match(verb)" />`).
 
 ## 4. RED FLAGS
 
-**BAD - All verbs allowed (default IIS behavior):**
-```xml
-<!-- No verb filtering configured -->
-<configuration>
-  <system.webServer>
-    <!-- Missing requestFiltering section -->
-  </system.webServer>
-</configuration>
-```
+**BAD - no `<requestFiltering><verbs>` section at all:** IIS accepts every verb.
 
 **BAD - allowUnlisted="true" allows all unlisted verbs:**
 ```xml
@@ -237,78 +100,11 @@ The following examples are kept only for legacy .NET Framework projects that sti
 </verbs>
 ```
 
-**BAD - DEBUG verb in production:**
-```xml
-<!-- Web.Release.config still allows DEBUG -->
-<verbs allowUnlisted="false">
-  <add verb="GET" allowed="true" />
-  <add verb="POST" allowed="true" />
-  <add verb="DEBUG" allowed="true" />  <!-- BAD - should be removed in release -->
-</verbs>
-```
-
-**BAD - DEBUG present in any web.config of an ASP.NET Core project:**
-```xml
-<add verb="DEBUG" allowed="true" />  <!-- Legacy verb; remove -->
-```
-
-**GOOD - Only necessary verbs:**
-```xml
-<requestFiltering>
-  <verbs allowUnlisted="false">
-    <add verb="GET" allowed="true" />
-    <add verb="POST" allowed="true" />
-    <add verb="PUT" allowed="true" />
-    <add verb="DELETE" allowed="true" />
-    <add verb="OPTIONS" allowed="true" />
-    <!-- Only verbs actually used in controllers -->
-  </verbs>
-</requestFiltering>
-```
-
 ## 5. Analysis Steps
 
 ### Step 1: Inventory All Controllers
 
-**Search for all controller files:**
-```
-Controllers/
-├── UsersController.cs
-├── ProductsController.cs
-├── OrdersController.cs
-└── AuthController.cs
-```
-
-**For each controller, identify HTTP verb attributes:**
-
-**Example inventory:**
-```
-UsersController.cs:
-  - HttpGet (lines 15, 22)
-  - HttpPost (line 30)
-  - HttpPut (line 38)
-  - HttpDelete (line 46)
-
-ProductsController.cs:
-  - HttpGet (lines 12, 18)
-  - HttpPost (line 25)
-  - HttpPut (line 33)
-
-OrdersController.cs:
-  - HttpGet (lines 10, 16, 23)
-  - HttpPost (line 30)
-  - HttpDelete (line 38)
-
-AuthController.cs:
-  - HttpPost (lines 12, 20)
-```
-
-**Consolidated list of used verbs:**
-- GET (all controllers)
-- POST (all controllers)
-- PUT (UsersController, ProductsController)
-- DELETE (UsersController, OrdersController)
-- OPTIONS (if CORS is configured - check Startup.cs/Program.cs)
+List every controller and endpoint file (section 7 search patterns) and consolidate the verbs used per file; add OPTIONS when CORS is configured (`AddCors` in `Program.cs` / `Startup.cs`) and HEAD whenever GET is used.
 
 ### Step 2: Check web.config Verb Whitelist
 
@@ -324,26 +120,6 @@ AuthController.cs:
   <add verb="PATCH" allowed="true" />    <!-- NOT USED ✗ - Report this -->
   <add verb="OPTIONS" allowed="true" />  <!-- Check if CORS is enabled -->
 </verbs>
-```
-
-### Step 3: Verify DEBUG Verb Configuration
-
-**Check web.config for DEBUG:**
-```xml
-<!-- On an ASP.NET Core project any occurrence is a finding (Medium); on a legacy .NET Framework project verify it is removed in Web.Release.config -->
-<add verb="DEBUG" allowed="true" />
-```
-
-**Check Web.Release.config (legacy .NET Framework only):**
-```xml
-<!-- Should either: -->
-<!-- 1. Replace entire verbs section without DEBUG -->
-<verbs xdt:Transform="Replace">
-  <!-- DEBUG not listed here -->
-</verbs>
-
-<!-- OR 2. Explicitly block DEBUG -->
-<add verb="DEBUG" allowed="false" xdt:Transform="SetAttributes" xdt:Locator="Match(verb)" />
 ```
 
 ## 6. What to Report
@@ -362,23 +138,6 @@ Finding: Dangerous HTTP Verb Allowed
 - Issue: Verb accepted by the server; TRACE/TRACK enable cross-site tracing, DEBUG is a legacy debugging hook
 - Risk: Medium - Exposes request internals or debugging behaviour to an attacker
 - Recommendation: Set allowUnlisted="false" and do not list the verb; on linux/edge block it in middleware or the WAF rule
-```
-
-```
-Finding: HTTP Verbs Not Filtered
-- Location: web.config (no <requestFiltering><verbs> section) / middleware
-- Issue: All verbs are accepted; `curl -X TRACE` returned [status]
-- Risk: Low - Increases attack surface; only exploitable together with another weakness
-- Recommendation: Whitelist the verbs used by the controllers with allowUnlisted="false" (or the middleware equivalent)
-```
-
-```
-Finding: Unused HTTP Verb Allowed
-- Verb: [Verb name]
-- Location: web.config
-- Issue: Verb is allowed but not used by any controller
-- Risk: Low - Increases attack surface unnecessarily
-- Recommendation: Remove unused verb from web.config
 ```
 
 ## 7. Search Patterns
@@ -401,15 +160,6 @@ Finding: Unused HTTP Verb Allowed
 // Minimal APIs and non-controller endpoints (Program.cs, *Endpoints.cs, extension methods)
 \bMap(Get|Post|Put|Delete|Patch|Methods|Group|HealthChecks|Hub|GraphQL|OpenApi)\(
 \[EnableQuery\]
-```
-
-**ASP.NET MVC/Web API** — legacy (.NET Framework), not expected on this stack:
-```csharp
-\[HttpGet\]
-\[HttpPost\]
-\[HttpPut\]
-\[HttpDelete\]
-\[AcceptVerbs\(
 ```
 
 **Files to search:**
@@ -441,47 +191,3 @@ Web.Release.config
 Web.Staging.config
 Web.Production.config
 ```
-
-## 8. Best Practices
-
-✅ **Configuration:**
-- Always set `allowUnlisted="false"` in web.config
-- Whitelist only verbs that are actually used in controllers
-- DEBUG must not appear in any web.config of an ASP.NET Core project (legacy .NET Framework projects remove it in Web.Release.config)
-- Verify verb filtering in all environment configurations (staging, production)
-
-✅ **Controller Analysis:**
-- Review all controllers systematically
-- Document which verbs are used and why
-- Remove unused HTTP verb attributes from controllers
-- Use specific verb attributes ([HttpGet], [HttpPost]) rather than [AcceptVerbs]
-
-✅ **Dangerous Verbs - Never Allow:**
-- **TRACE** - Can expose sensitive information via XST (Cross-Site Tracing) attacks
-- **TRACK** - Similar to TRACE
-- **CONNECT** - Used for tunneling, not needed for REST APIs
-- **DEBUG** - Legacy .NET Framework verb; never needed by ASP.NET Core
-
-✅ **Common Verbs:**
-- **GET** - Almost always needed for retrieving data
-- **POST** - Commonly needed for creating resources
-- **PUT** - Needed for full updates (if your API uses PUT)
-- **DELETE** - Needed if your API allows deletions
-- **PATCH** - Only if you implement partial updates (less common)
-- **OPTIONS** - Needed whenever the front-end calls the API cross-origin (preflight)
-- **HEAD** - Allow whenever GET is allowed (health probes, static-file handler, monitoring)
-
-✅ **Environment-Specific Configuration:**
-- All environments: identical verb list; DEBUG is never allowed on ASP.NET Core
-- Production: Minimal set of verbs
-
-✅ **Documentation:**
-- Document why each verb is allowed
-- Include verb analysis in security review checklist
-- Update web.config when adding new controller actions with different verbs
-
-✅ **Regular Review:**
-- Review verb configuration when adding new controllers
-- Audit unused verbs quarterly
-- Verify Web.Release.config transformations are applied correctly
-- Test verb filtering in each environment

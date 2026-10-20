@@ -65,11 +65,6 @@ Identify all user-controlled input flowing into queries:
 
 ## 7. Framework-Specific Checks
 
-- Confirm parameterized queries or `IDbCommand` parameters are used consistently
-- Verify proper escaping mechanisms are in place where raw SQL is unavoidable
-- Look for bypasses of built-in ORM query protections
-- Examine custom SQL builders or query helper utilities
-
 **Files to examine:**
 - `**/*.cs` (repositories, `*DbContext*.cs`, `*Repository*.cs`, `*Query*.cs`, `*Handler*.cs`, Dapper helpers)
 - `**/*.sql`, `**/*.sqlproj` (DACPAC) and `**/Migrations/**/*.cs` for dynamic SQL inside stored procedures, functions and `migrationBuilder.Sql(...)` (section 3)

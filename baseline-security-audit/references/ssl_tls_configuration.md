@@ -14,9 +14,7 @@ Analyze the production application's SSL/TLS configuration to identify weak prot
 
 **Primary Tool**: the SSL Labs Server Test, driven through its API v4 (API v3 was retired on 1 January 2024; the browser form is only the fallback in (c)).
 
-**Ask the user for** (once; reuse `PRODUCTION_URL` when SKILL.md already collected it):
-- Production URL(s) to test (e.g. `https://app.example.com`, `https://api.example.com`)
-- Any additional endpoints (API endpoints, admin portals, etc.)
+Test `PRODUCTION_URL` and, after asking once, any additional endpoints (API host, admin portal).
 
 **How to Test**:
 
@@ -56,11 +54,6 @@ SSL 3.0 (Critical - POODLE attack, deprecated in 2015)
 TLS 1.0 (High - Deprecated in 2020, PCI DSS non-compliant)
 TLS 1.1 (High - Deprecated in 2020, PCI DSS non-compliant)
 ```
-
-**SSL Labs Grade Impact:**
-- SSL 2.0/3.0 enabled → **Grade: F** (Fail)
-- TLS 1.0/1.1 enabled → **Grade capped at B**
-- Only TLS 1.2/1.3 → **Grade: A possible**
 
 **HTTP to HTTPS enforcement:** besides App Service `httpsOnly` (section 9), look for `app.UseHttpsRedirection()` with `AddHsts` / `UseHsts` in `Program.cs`, `[RequireHttps]` on legacy MVC controllers, and on `iis` the native `<hsts redirectHttpToHttps="true">` element or a URL Rewrite rule redirecting to `https://{HTTP_HOST}{REQUEST_URI}`. No application-level or platform-level redirect = Medium. HSTS header values are rated in check 14 (security_headers.md).
 
@@ -105,11 +98,7 @@ Anonymous DH (No authentication)
 Cipher suites with key size < 128 bits
 ```
 
-**RED FLAGS in SSL Labs:**
-- Cipher suite order: Server should choose (not client)
-- Weak cipher suites accepted
-- Cipher suites without Forward Secrecy (PFS)
-- Use of CBC-mode ciphers for TLS 1.2
+Server-preferred cipher order is expected; client preference = Medium (section 12).
 
 ## 4. Certificate Security
 
@@ -161,15 +150,8 @@ Session resumption: Supported (for performance)
 OCSP Stapling (only where the certificate has an OCSP URL; N/A for CRL-only certificates)
 Certificate Transparency (SCTs)
 TLS compression: DISABLED (CRIME attack)
+Client-initiated renegotiation: DISABLED
 TLS 1.3 (SSL Labs caps servers without TLS 1.3 at A- since March 2025; TLS_FALLBACK_SCSV is no longer graded and is irrelevant once TLS 1.0/1.1 are disabled)
-```
-
-**❌ MUST be disabled:**
-```
-TLS compression (CRIME attack)
-Session renegotiation (if insecure)
-SSL 2.0 fallback
-Client-initiated renegotiation
 ```
 
 ## 6. Forward Secrecy (Perfect Forward Secrecy - PFS)
@@ -181,14 +163,7 @@ Client-initiated renegotiation
 - Use ECDHE (Elliptic Curve Diffie-Hellman Ephemeral) or DHE
 - Avoid RSA key exchange
 
-**Benefits:**
-- Session keys aren't compromised if private key is stolen
-- Past communications remain secure even if server is compromised later
-
-**SSL Labs check:**
-- "Forward Secrecy" section shows support level
-- Look for "Yes (with most browsers)" - GOOD
-- "No" or "With some browsers" - NEEDS IMPROVEMENT
+SSL Labs "Forward Secrecy": "Yes (with most browsers)" is compliant; "No" or "With some browsers" = High.
 
 ## 7. Common Vulnerabilities to Check
 
@@ -207,10 +182,7 @@ DROWN (SSLv2) - SSLv2 must be completely disabled
 Sweet32 (3DES) - 3DES must be disabled
 ```
 
-**SSL Labs Vulnerability Tests:**
-- Checks for each known vulnerability
-- Shows "No" (good) or "Yes" (vulnerable)
-- Any "Yes" result is Critical and must be fixed
+Any "Yes" in the SSL Labs vulnerability fields is Critical.
 
 ## 8. SSL Labs Grading Criteria
 
@@ -230,8 +202,7 @@ Source: https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide
 
 For Azure-hosted applications, HTTPS enforcement and the minimum TLS version are set on the App Service resource in infrastructure-as-code.
 
-**Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`.
-Clone it with git — no special tooling is required. Ask the user for the project folder path (e.g. /tenants/enigmatry/projects/my-project) before cloning
+Read the project's module in the infrastructure repository (SKILL.md Step 1).
 
 **GOOD:**
 ```bicep
@@ -292,58 +263,7 @@ RemoteCertificateValidationCallback
 
 **For each production endpoint tested:**
 
-### SSL Labs Summary:
-```
-Endpoint: https://production.example.com
-Overall Grade: A+ / A / B / C / D / F
-Certificate Grade: 100 / <100
-Protocol Support: 95 / <95
-Key Exchange: 90 / <90
-Cipher Strength: 90 / <90
-```
-
-### Protocol Support:
-```
-TLS 1.3: ✅ Enabled / ❌ Disabled
-TLS 1.2: ✅ Enabled / ❌ Disabled
-TLS 1.1: ❌ MUST BE DISABLED / ⚠️ Currently enabled
-TLS 1.0: ❌ MUST BE DISABLED / ⚠️ Currently enabled
-SSL 3.0: ❌ MUST BE DISABLED / ⚠️ Currently enabled
-SSL 2.0: ❌ MUST BE DISABLED / ⚠️ Currently enabled
-```
-
-### Cipher Suites:
-```
-✅ Strong ciphers only (ECDHE, AES-GCM)
-⚠️ Weak ciphers detected: [list specific ciphers]
-❌ Critical: Broken ciphers enabled: [list specific ciphers]
-```
-
-### Certificate Details:
-```
-Issuer: [CA Name]
-Valid from: [Date]
-Valid until: [Date]
-Key: RSA 2048 bits / RSA 4096 bits / ECDSA 256 bits
-Signature: SHA256withRSA / SHA1withRSA (⚠️ deprecated)
-```
-
-### Vulnerabilities:
-```
-POODLE (SSL): ✅ Not vulnerable / ❌ VULNERABLE
-BEAST: ✅ Not vulnerable / ⚠️ Mitigated / ❌ VULNERABLE
-CRIME: ✅ Not vulnerable / ❌ VULNERABLE
-Heartbleed: ✅ Not vulnerable / ❌ VULNERABLE
-FREAK: ✅ Not vulnerable / ❌ VULNERABLE
-Logjam: ✅ Not vulnerable / ❌ VULNERABLE
-DROWN: ✅ Not vulnerable / ❌ VULNERABLE
-```
-
-### Security Features:
-```
-Forward Secrecy: ✅ Yes (all ciphers) / ⚠️ With some browsers / ❌ No
-OCSP Stapling: ✅ Enabled / ❌ Disabled
-```
+Per endpoint: overall grade and the cap that applies (section 8); protocols (TLS 1.3 / 1.2 present, TLS 1.1 / 1.0 / SSL absent); cipher suites (strong only, or the weak and broken suites by name); certificate issuer, validity dates, key type and size, signature algorithm, chain completeness; the vulnerability fields (POODLE, BEAST, CRIME, Heartbleed, FREAK, Logjam, DROWN, Sweet32); Forward Secrecy and OCSP stapling status. Each gap is a finding rated per section 12.
 
 ## 12. Remediation Priorities
 
@@ -375,24 +295,3 @@ OCSP Stapling: ✅ Enabled / ❌ Disabled
 - ECDSA P-256/P-384 certificates (smaller handshakes; RSA key size above 2048 is not a finding either way)
 - Certificate Transparency compliance
 - Post-quantum hybrid key exchange (X25519MLKEM768) not offered — hygiene; default in current browsers, available on Windows Server 2025
-
-## 13. Testing Procedure
-
-**Step-by-step SSL Labs audit:**
-
-1. **Obtain production URL(s) and run the SSL Labs API v4 analysis** as described in section 1 (one `analyze` call per endpoint, polled until `READY`; all protocols, ciphers and vulnerabilities are covered), falling back to the local probes or a user-supplied report when the API is unavailable
-
-2. **Analyze results**
-   - Overall grade
-   - Protocol support
-   - Cipher suites
-   - Certificate details
-   - Vulnerability checks
-   - Security features
-
-3. **Document findings**
-   - Grade per endpoint from `endpoints[].grade` (or the openssl / testssl.sh output when the API was unavailable)
-   - List of specific issues
-   - Prioritized remediation steps
-   - Provide specific configuration changes needed
-

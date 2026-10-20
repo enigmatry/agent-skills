@@ -77,10 +77,10 @@ Do **not** accept these as evidence; they do not turn on rules that are disabled
 Report "security analyzers not enabled" as a Medium finding when none of the accepted settings is configured. Reference: https://learn.microsoft.com/dotnet/fundamentals/code-analysis/configuration-options
 
 **RED FLAGS:**
-- Build warnings suppressed in bulk via `<NoWarn>` without justification, or `<NoWarn>` containing `CA2100`, `CA5xxx` or `NU1901`–`NU1904` (Medium)
+- Build warnings suppressed in bulk via `<NoWarn>` without justification, or `<NoWarn>` containing `CA2100` or `CA5xxx` (Medium); `NU1901`–`NU1904` in `<NoWarn>` is rated by check 2 (packages.md) section 5
 - Vulnerable packages do not fail CI (Medium). Compliant when either `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` is set (it promotes `NU1903`/`NU1904` with every other warning) or `<WarningsAsErrors>` lists `NU1903;NU1904`. Red flag when neither is set, or when `TreatWarningsAsErrors=true` is combined with `<WarningsNotAsErrors>` that lists `NU1903` or `NU1904` (Microsoft's documented pattern of excluding only `NU1901;NU1902` is fine). Reference: https://learn.microsoft.com/nuget/concepts/auditing-packages
 - Vulnerability advisories present in restore output but not acted on (rate by the advisory's CVSS band as in check 2, packages.md)
-- `NU1900` or `NU1905` in the restore output: the audit could not run (no vulnerability data source configured), which is itself a Medium finding
+- `NU1900` or `NU1905` in the restore output: the audit could not run; the missing `<auditSources>` is rated by check 2 (packages.md) section 5
 
 **Frontend static analysis:** check that `angular-eslint` is in `package.json` with an `.eslintrc*` or `eslint.config.*` file, that the pipeline runs a lint step (`ng lint` or `npm run lint`), and read the `ng build` output (budget and deprecation warnings) and the `npm audit` output in the build log (rate advisories per check 2, packages.md). No lint step, or lint warnings ignored = Low.
 

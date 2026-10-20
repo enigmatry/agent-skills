@@ -90,24 +90,6 @@ Committed values like these in `appsettings*.json`, `environment.ts` or pipeline
 - Service URLs with embedded credentials
 - Private keys and certificate files (`.pfx`/`.p12`) with their passwords
 
-**High-risk patterns to identify:**
-```csharp
-// DANGEROUS: Hardcoded connection strings
-var connectionString = "Server=prod-server;Database=mydb;User=sa;Password=MyPassword123;";
-
-// DANGEROUS: API keys in code
-var apiKey = "sk-1234567890abcdef1234567890abcdef";
-httpClient.DefaultRequestHeaders.Add("X-API-Key", "live-key-12345");
-
-// DANGEROUS: Hardcoded credentials
-var username = "admin";
-var password = "SuperSecret123!";
-
-// SAFER: Using configuration
-var connectionString = _configuration.GetConnectionString("DefaultConnection");
-var apiKey = _configuration["ExternalApi:ApiKey"];
-```
-
 ## 4. Environment-Specific Configuration Security
 
 **Verify proper secret management across environments:**
@@ -116,25 +98,9 @@ var apiKey = _configuration["ExternalApi:ApiKey"];
 - Use of secure configuration providers (Azure Key Vault, AWS Secrets Manager)
 - Environment variable usage for sensitive data
 
-**Check for:**
-```csharp
-// Proper secret management patterns
-builder.Configuration.AddAzureKeyVault(new Uri(vaultUri), new DefaultAzureCredential()); // Azure.Extensions.AspNetCore.Configuration.Secrets
-Environment.GetEnvironmentVariable("SECRET_NAME");
-_configuration["ConnectionStrings:Database"]; // From secure store
+Secure patterns: `builder.Configuration.AddAzureKeyVault(new Uri(vaultUri), new ManagedIdentityCredential())` (`Azure.Extensions.AspNetCore.Configuration.Secrets`), environment variables, user secrets in development. A `#if DEBUG` switch between two literal values is still a hardcoded secret.
 
-// AVOID: Environment-specific hardcoding
-#if DEBUG
-    var apiUrl = "https://dev-api.example.com/key123";
-#else
-    var apiUrl = "https://prod-api.example.com/livekey456"; // ❌ Still hardcoded
-#endif
-```
-
-**Check the infrastructure repository for Key Vault configuration:**
-
-**Infrastructure repository**: The shared Bicep files for all projects are at `https://dev.azure.com/enigmatry/Enigmatry%20-%20CICD%20Azure%20Infra/_git/enigmatry-cicd-azure-infra`. 
-Clone it with git — no special tooling is required. Ask the user for the project folder path (e.g. /tenants/enigmatry/projects/my-project) before cloning
+**Key Vault definition in the infrastructure repository (SKILL.md Step 1):**
 
 ```bicep
 // GOOD — soft delete and purge protection guard against accidental or malicious deletion
@@ -144,12 +110,6 @@ resource keyVault 'Microsoft.KeyVault/vaults@2024-11-01' = {
     enablePurgeProtection: true
     enableRbacAuthorization: true  // Prefer RBAC over legacy access policies
   }
-}
-
-// RED FLAG — purge protection absent or disabled (soft-deleted secrets can be purged immediately)
-properties: {
-  enableSoftDelete: true
-  enablePurgeProtection: false   // or the property is missing altogether
 }
 
 // RED FLAG — secrets hardcoded as Bicep parameters passed at deploy time
@@ -222,17 +182,6 @@ SigningCredentials and SymmetricSecurityKey usage
 - Branch protection and secret scanning
 - .gitignore effectiveness for sensitive files
 
-**Files that should never contain secrets:**
-```bash
-# Configuration files in source control
-appsettings.json, appsettings.Production.json
-web.config, app.config
-# Environment files
-.env, .env.production, .env.local
-# Build files
-*.csproj, *.props, Dockerfile
-```
-
 **Run the scan:**
 ```bash
 gitleaks git . --redact --report-format json --report-path gitleaks-history.json   # full git history
@@ -257,71 +206,7 @@ Source: https://github.com/gitleaks/gitleaks
 
 **Base-file inheritance:** a value in `appsettings.json` applies to every environment whose override file does not replace it, so compare the effective value per environment (base plus override), not the files in isolation. A production connection string or credential in the base file is effectively shared with every environment (High).
 
-**Credentials to compare across environments:**
-
-**Database connection strings:**
-```json
-// Check for identical values across environments
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=...;Database=...;User Id=sa;Password=...",
-    "AppDatabase": "Server=...;User Id=appuser;Password=..."
-  }
-}
-```
-
-**Azure/Cloud service credentials:**
-```json
-{
-  "AzureAd": {
-    "ClientId": "...",        // Application/Client ID — public identifier, Low if reused
-    "ClientSecret": "...",    // Client secret — credential
-    "TenantId": "..."         // Tenant ID — public identifier, may legitimately be the same
-  },
-  "Storage": {
-    "AccountName": "...",     // Storage account name
-    "AccountKey": "...",      // Storage account key
-    "ConnectionString": "..." // Full connection string
-  },
-  "ServiceBus": {
-    "ConnectionString": "...",
-    "Namespace": "..."
-  },
-  "KeyVault": {
-    "VaultUri": "...",
-    "ClientId": "...",        // public identifier, Low if reused
-    "ClientSecret": "..."     // credential
-  }
-}
-```
-
-**API credentials and keys:**
-```json
-{
-  "ExternalApis": {
-    "PaymentGateway": {
-      "ApiKey": "...",
-      "ApiSecret": "...",
-      "MerchantId": "..."
-    },
-    "EmailService": {
-      "ApiKey": "...",
-      "SenderId": "..."
-    }
-  }
-}
-```
-
-**Service account credentials:**
-```json
-{
-  "ServiceAccounts": {
-    "Username": "...",
-    "Password": "...",
-    "Domain": "..."
-  }
-}
-```
+**Keys to compare** (effective value per environment): `ConnectionStrings:*`; `AzureAd:ClientSecret` (credential) next to `ClientId` / `TenantId` (public identifiers, Low); `Storage:AccountKey` / `ConnectionString`; `ServiceBus:ConnectionString` / `Namespace`; `KeyVault:VaultUri` / `ClientSecret`; `ExternalApis:*:ApiKey` / `ApiSecret` / `MerchantId`; `ServiceAccounts:Username` / `Password`.
 
 ### Angular environment files
 
@@ -354,12 +239,7 @@ export const environment = {
 };
 ```
 
-**Checks:**
-- OAuth client IDs reused across environments (public identifier; separate app registrations per environment — Low)
-- Third-party public keys reused across environments (Google Maps browser keys, reCAPTCHA site keys, Stripe publishable keys, analytics IDs — Low)
-- Backend API URLs (should point to correct environment)
-
-**Note:** Angular environment files are compiled into the application bundle. Sensitive credentials should NOT be stored here; any secret-bearing value found here is a hardcoded-secret finding (section 1). Only public keys and identifiers are compared for reuse.
+Also compare the backend API URLs; each must point at its own environment.
 
 ### Azure Pipeline variable files
 
@@ -369,15 +249,6 @@ export const environment = {
 - `/variables.acceptance.yml` - Staging/Acceptance variables
 - `/variables.prod.yml` - Production variables
 - `/variables.[env].yml` - Any environment-specific variable files
-
-**Credentials to compare:**
-- Database usernames and server names
-- Azure AD Client IDs / Application IDs (public identifiers — Low if shared)
-- Storage account names
-- Service principal IDs (public identifiers — Low if shared)
-- API keys and endpoints
-- Service connection names
-- Key Vault names and URIs
 
 **Flags to raise:**
 - Identical `DatabaseUsername` across environments
@@ -389,40 +260,11 @@ export const environment = {
 
 ### Deployment profiles
 
-**Files to examine:**
-- `publish-web-profile-dev-*.proj` - Development deployment profile
-- `publish-web-profile-test-*.proj` - Test deployment profile
-- `publish-web-profile-acc-*.proj` - Staging/Acceptance deployment profile
-- `publish-web-profile-prod-*.proj` - Production deployment profile
-- `publish-web-profile-[env]-*.proj` - Any environment-specific deployment profiles
+**Files to examine:** `publish-web-profile-<env>-*.proj` (dev, test, acc, prod and any other environment); compare the same keys as above.
 
-### Remediation recommendations
+### Remediation
 
-**For database credentials:**
-1. Create separate database users per environment
-2. Grant minimum required permissions per environment
-3. Use different passwords per environment
-4. Consider using managed identities (no passwords needed)
-
-**For Azure resources:**
-1. Create separate app registrations per environment
-2. Use separate service principals per environment
-3. Implement separate managed identities per environment
-4. Use environment-specific resource groups and subscriptions
-
-**Prefer eliminating client secrets altogether.** Managed identity for Azure-hosted workloads, federated identity credentials for pipelines and external workloads, and certificates where neither fits remove the secret that would otherwise be committed, reused or rotated. Report `ClientSecret` usage (`AzureAd:ClientSecret`, `ClientSecretCredential`, `.WithClientSecret(`) where managed identity or federated identity is possible as Medium, and recommend a tenant app management policy that blocks `passwordAddition` and caps `passwordLifetime` so no new secrets can be added to the app registrations. Source: https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-app-management-policies
-
-**For third-party APIs:**
-1. Request separate API keys per environment from vendors
-2. Use environment-specific accounts/tenants where available
-3. Implement proper key rotation
-4. Use test/sandbox APIs for non-production environments
-
-**For deployment:**
-1. Use separate service connections per environment in CI/CD
-2. Implement environment-specific variable groups
-3. Use Azure KeyVault references for secrets
-4. Implement approval gates for production deployments
+Separate database users, app registrations, service principals, managed identities, API keys and CI/CD service connections per environment, with environment-specific variable groups and Key Vault references. **Prefer eliminating secrets altogether:** managed identity, workload identity federation or certificates instead of client secrets (rated by check 19 (authentication_security.md) section 4), and Entra authentication with `disableLocalAuth` instead of SQL passwords and Storage / Service Bus / Cosmos DB account keys (Medium where possible).
 
 ## What to Report
 
@@ -437,74 +279,18 @@ For each finding, provide:
 
 ### Configuration and tooling
 
-- **Medium**: `ClientSecret` used where managed identity or federated identity is possible, and SQL passwords or Storage / Service Bus / Cosmos DB account keys used where Entra authentication with `disableLocalAuth` is possible (section 8 remediation); Key Vault with `enablePurgeProtection` absent or `false` (section 4)
+- **Medium**: SQL passwords or Storage / Service Bus / Cosmos DB account keys used where Entra authentication with `disableLocalAuth` is possible (section 8); Key Vault with `enablePurgeProtection` absent or `false` (section 4). `ClientSecret` where managed identity or federation is possible is rated by check 19 (authentication_security.md)
 - **Medium**: a pipeline secret passed as a command-line argument or echoed instead of mapped through `env:` (section 8)
 
 ### Credential reuse across environments
 
-**Report ALL instances of credential reuse (severity varies by environment pair and by whether the value is a credential or a public identifier):**
+**Credential reuse severity** (by environment pair and by whether the value is a credential or a public identifier):
 
-**Critical:**
-- **Production credentials reused in Test/Development**
-  - Immediate security risk
-  - Could lead to production data exposure
-  - Accidental production changes from non-prod code
+| Reuse | Severity |
+|-------|----------|
+| Production credential reused in any non-production environment | Critical |
+| Staging/Acceptance credential reused in Test/Development; the same service principal or app registration secret or certificate across environments (a shared `ClientId` alone is Low) | High |
+| Test credential reused in Development; shared infrastructure between two environments (SQL Server host, Key Vault, storage account, Service Bus namespace, app registration; High when production is one of them); a secret API key shared across environments | Medium |
+| Public identifiers shared (ClientId, TenantId, service principal ids, Application Insights keys, analytics ids, browser keys); the same database username with a different password on a different server | Low |
 
-- **Production credentials reused in Staging/Acceptance**
-  - High risk of production impact
-  - Testing could affect production systems
-
-**High:**
-- **Staging/Acceptance credentials reused in Test/Development**
-  - Risk of environment contamination
-  - Staging should mirror production security
-
-- **Same service principal/app registration across all environments** (the client secret or certificate is shared; a shared `ClientId` alone is Low)
-  - Compromised dev credentials affect all environments
-  - Difficult to audit and track environment-specific access
-
-**Medium:**
-- **Test credentials reused in Development**
-  - Less critical but still not best practice
-  - Makes access auditing difficult
-
-- **Shared infrastructure between two environments** (same SQL Server host, Key Vault, storage account, Service Bus namespace or app registration; High when production shares with any non-production environment)
-
-- **Shared secret API keys across any environments**
-  - Cannot revoke for one environment without affecting others
-  - Difficult to track usage per environment
-
-**Low:**
-- **Public identifiers shared across environments** (ClientId, TenantId, service principal IDs, Application Insights instrumentation keys or connection strings, analytics IDs, Google Maps browser keys, reCAPTCHA site keys, Stripe publishable keys)
-  - Hygiene only: no access is granted by the value itself
-  - Separate app registrations and telemetry resources per environment keep audit trails clean
-
-- **Same database username with a different password on a different server**
-  - Hygiene only; becomes the same credential (rate per the matrix above) when the password or the server is also shared
-
-**For each credential reuse instance, provide:**
-1. **File paths** where credentials appear
-2. **Credential type** (database user, API key, client ID, etc.)
-3. **Credential identifier** (username, account name, app ID - NOT the password/secret)
-4. **Environments affected** (which environments share the credential)
-5. **Severity** (Critical / High / Medium / Low) based on the matrix above
-6. **Impact assessment**:
-   - What resources does this credential access?
-   - What could happen if dev/test credential is compromised?
-   - Could this lead to production data access?
-7. **Recommended remediation**:
-   - Create separate credentials per environment
-   - Use environment-specific app registrations
-   - Implement proper key rotation strategy
-
-**Example report format:**
-```
-Finding: Database Username Reused Across Environments
-- File 1: appsettings.Development.json
-- File 2: appsettings.Production.json
-- Credential Type: SQL Database Username
-- Value: "app_user"
-- Severity: Low (the servers and the passwords differ; when the password is also shared or both files point at the same server it is the same credential and is rated per the matrix above — Critical for a production credential in Development)
-- Impact: A shared login name makes per-environment auditing and revocation harder
-- Recommendation: Create separate database users (e.g., app_user_dev, app_user_prod)
-```
+**For each credential reuse instance, provide:** file paths, credential type, credential identifier (username, account name, app id, never the secret), environments affected, severity from the table, what the credential can access, and the remediation (separate credentials or app registrations per environment, rotation).
