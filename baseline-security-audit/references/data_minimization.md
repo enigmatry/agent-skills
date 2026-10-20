@@ -100,12 +100,14 @@ Rate each endpoint assessed QUESTIONABLE or EXCESSIVE in section 3 per the Sever
 
 ## 7. Sensitive Data Fields to Identify
 
+Storage findings cover only the groups below. Contact data the application needs for a feature (name, e-mail address, phone number, address) is not a storage finding.
+
 **High-sensitivity fields to scrutinize** (property names to search for):
 - Identification and biometric: `SocialSecurityNumber`, `TaxId`, `PassportNumber`, `DriverLicenseNumber`, `NationalId`, `Bsn` / `BurgerServiceNummer` (UAVG art. 46: only with a statutory basis), `FingerprintData`, `BiometricData`
 - Financial: `CreditCardNumber`, `BankAccountNumber`, `IBAN`, `RoutingNumber`, `Salary`, `Income`, `CreditScore`
 - Medical: `MedicalRecordNumber`, `BloodType`, `Diagnosis`, `Medication`, `HealthCondition`, `Disability`
 - Demographic (often unnecessary): `DateOfBirth`, `Age`, `Race`, `Ethnicity`, `Religion`, `MaritalStatus`, `Gender`, `SexualOrientation`, `Nationality`
-- Contact, employment, family, location and behavioural: `HomeAddress`, `PhoneNumber`, `PersonalEmail`, `CurrentSalary`, `PreviousEmployer`, `TerminationReason`, `SpouseName`, `EmergencyContact*`, `Latitude` / `Longitude` / `GPSCoordinates`, `BrowsingHistory`, `SearchHistory`, `PurchaseHistory`, `LastLoginLocation`
+- Employment, family, location and behavioural: `CurrentSalary`, `PreviousEmployer`, `TerminationReason`, `SpouseName`, `EmergencyContact*`, `Latitude` / `Longitude` / `GPSCoordinates`, `BrowsingHistory`, `SearchHistory`, `PurchaseHistory`, `LastLoginLocation`
 
 **Uncontrolled PII sinks:** free-text columns (`Notes`, `Comments`, `Description`, `Remarks`), JSON columns (`nvarchar(max)` holding serialised objects, `OwnsOne(...).ToJson()`) and file-upload columns (`byte[]`, `varbinary(max)`, blob references for ID scans) can hold personal data outside the modelled fields. Present without a retention or classification rule = Medium.
 
@@ -118,7 +120,7 @@ Rate each endpoint assessed QUESTIONABLE or EXCESSIVE in section 3 per the Sever
 1. **Business necessity:** which feature needs it; can the application work without it?
 2. **Legal basis:** required by law, KYC or tax reporting?
 3. **Alternatives:** derive it when needed, store a less sensitive form (age range instead of date of birth), a hash, or request it only when needed?
-4. **Retention:** how long is it kept and is there a purge? Evidence to look for: a scheduled purge (`IHostedService`/`BackgroundService`, Hangfire `RecurringJob`, Quartz, a timer-triggered Azure Function) that deletes or anonymises personal data, a right-to-erasure path (`DeleteUser`, `Anonymi[sz]e`, `Erase`), and defined backup and log retention. Soft-delete (`IsDeleted`, `DeletedAt`, a global query filter) that keeps the PII rows forever counts as no deletion. No purge or erasure path for stored personal data = High.
+4. **Retention:** how long is it kept? Ask the user; not a finding on its own.
 
 ## 9. Regulatory Basis
 
@@ -146,7 +148,7 @@ Rate each endpoint assessed QUESTIONABLE or EXCESSIVE in section 3 per the Sever
 
 ## What to Report
 
-**Exposure findings (sections 1–5)** — for each finding, provide:
+**Exposure findings (sections 1–5)** — report every unused or dead response field (never read by the frontend, or never assigned) together as **one Low finding** that lists each endpoint and field. Sensitive fields rated Critical or High below stay separate findings. For each finding, provide:
 - **Endpoint** (file and line number)
 - **Response field(s)** or **data category** that is unnecessarily exposed
 - **Assessment**: JUSTIFIED / QUESTIONABLE / EXCESSIVE (section 3); only QUESTIONABLE and EXCESSIVE produce findings
@@ -175,9 +177,9 @@ Rate each endpoint assessed QUESTIONABLE or EXCESSIVE in section 3 per the Sever
 
 **Severity** (one rating for both kinds of finding):
 - **Critical**: sensitive field (password hash, token, BSN/SSN, PAN, health data) exposed to unauthenticated callers or to other users; BSN/SSN, PAN, CVV or health data stored without a legal basis or business need
-- **High**: the same sensitive field exposed only to the authenticated owner or to admins; GraphQL or SignalR detailed errors outside Development; other special-category data (GDPR art. 9: race, ethnicity, religion, sexual orientation, biometric) or financial data (bank account, IBAN, salary, credit score) stored without need; BSN/SSN, PAN or health data copied into a secondary store without its own retention and encryption; no purge or erasure path for stored personal data
-- **Medium**: other PII (email, phone, address, date of birth) exposed without a frontend need; OData `$expand` without `MaxExpansionDepth`; ordinary PII (date of birth, full address, phone numbers, gender, marital status, precise location) stored without need, or copied into a secondary store; free-text, JSON or file-upload columns without a retention or classification rule; Entra ID profile attributes duplicated into the user table; `console.log` of API responses carrying personal data
-- **Low**: non-sensitive over-fetch (unused ordinary fields, full entity in a lookup, legacy fields kept for backward compatibility); non-sensitive data stored without need (age range, city/country, preferences); full user or customer object retained in Angular state or an interceptor cache where two fields are used
+- **High**: the same sensitive field exposed only to the authenticated owner or to admins; GraphQL or SignalR detailed errors outside Development; other special-category data (GDPR art. 9: race, ethnicity, religion, sexual orientation, biometric) or financial data (bank account, IBAN, salary, credit score) stored without need; BSN/SSN, PAN or health data copied into a secondary store without its own retention and encryption
+- **Medium**: OData `$expand` without `MaxExpansionDepth`; date of birth, gender, marital status or precise location stored without need; ordinary PII copied into a secondary store; free-text, JSON or file-upload columns without a retention or classification rule; Entra ID profile attributes duplicated into the user table; `console.log` of API responses carrying personal data
+- **Low**: the grouped unused-field finding (unused ordinary fields and ordinary PII the frontend never reads, dead properties, full entity in a lookup, legacy fields kept for backward compatibility); non-sensitive data stored without need (age range, city/country, preferences); full user or customer object retained in Angular state or an interceptor cache where two fields are used
 - **Low**: EU Data Act or EU AI Act applicability "verify with the product owner" item (section 9); not a code finding
 - **Not a finding**: ids, foreign keys and `CreatedBy`/`ModifiedBy`, unless they expose another user's PII to non-admins; a stored field assessed JUSTIFIED. QUESTIONABLE or POTENTIALLY JUSTIFIED stored fields are rated one level lower than NOT JUSTIFIED.
 

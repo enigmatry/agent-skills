@@ -122,7 +122,6 @@ Source: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis/
 - Numeric inputs without range validation
 - Text inputs without length constraints
 - Email/URL inputs without format validation
-- Missing client-side validation while server-side validation exists (Low)
 - Direct database entity binding without DTO layer
 - Query string/route parameters used without validation
 
@@ -137,7 +136,7 @@ Source: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis/
 **Risk Assessment:**
 - **High**: No server-side validation on an input that reaches a database, file system, external call or authorization decision
 - **Medium**: Other missing server-side validation
-- **Low**: Client-side validation missing while server-side validation exists. Client-side validation on its own never counts as validation: an input validated only in Angular is rated as missing server-side validation (High or Medium above)
+- Client-side validation is a user-experience concern: its absence is not a finding, and on its own it never counts as validation (an input validated only in Angular is rated as missing server-side validation, High or Medium above). A sort column passed to Dynamic LINQ needs no allow-list (check 3 (sql_injection.md) section 4)
 
 ## 7. Search Patterns
 

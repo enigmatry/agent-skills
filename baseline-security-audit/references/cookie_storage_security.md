@@ -149,7 +149,7 @@ this.cookieService.set('token', token, {
 Rate every stored value by the sensitivity scale in section 8; theme, language, cart contents, timestamps and UI settings are not findings.
 
 **Token caches of the standard OIDC libraries are rated by cache location, not as home-grown storage:**
-- MSAL (`@azure/msal-angular`, `cacheLocation`) or `oidc-client-ts` / `angular-auth-oidc-client` using `sessionStorage` → Low (library default, tab-scoped; note it, recommend keeping the default)
+- MSAL (`@azure/msal-angular`, `cacheLocation`) or `oidc-client-ts` / `angular-auth-oidc-client` using `sessionStorage` → not a finding (library default, tab-scoped)
 - The same libraries configured for `localStorage` → Medium (persists across tabs and restarts; recommend `sessionStorage`)
 - Any home-grown `localStorage.setItem('token', ...)` of a JWT or bearer token → High
 
@@ -195,7 +195,6 @@ For each finding, provide:
   - **Critical**: Passwords, SSN / national id, card numbers (PAN / CVV), private keys
   - **High**: Home-grown JWT or bearer token in localStorage, session id, API key, authorization data (`Role`, `IsAdmin`) trusted without a signature
   - **Medium**: Email, phone, address and other PII in plaintext; OIDC library token cache configured for `localStorage`
-  - **Low**: OIDC library token cache in `sessionStorage` (library default)
 - **Encryption status**: Encrypted or plaintext
 - **Usage**: How the data is used in the application
 - **Risk level**: Impact if data is compromised

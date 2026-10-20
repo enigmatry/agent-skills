@@ -197,7 +197,7 @@ options.ClientSecret = "...";  // secrets can leak; certificates or managed iden
 
 **Search for:**
 - `BasicAuthentication`, `Basic ` in authorization headers
-- Static or long-lived API keys used for service authentication
+- Static or long-lived API keys used for service authentication (the Enigmatry Entry health-check token is the standard setup and not a finding)
 - `ClientSecret` in OIDC or Azure AD configurations — flag if not sourced from Key Vault and recommend migration to workload identity federation, certificate or managed identity
 - `DefaultAzureCredential` outside local-development code paths — Low; recommend `ManagedIdentityCredential` or an explicit `ChainedTokenCredential` in production (https://learn.microsoft.com/en-us/dotnet/azure/sdk/authentication/best-practices)
 

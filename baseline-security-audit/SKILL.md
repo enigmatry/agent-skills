@@ -90,7 +90,7 @@ Every reference file rates findings on this one scale. Rate by **impact and expl
 | **Critical** | Exploitable now, from unauthenticated or low-privilege input, with severe impact | Secret or credential in source, config or logs; injection reachable from user input; authentication bypass; CVSS 9.0+; CVV or PAN stored in clear; broken or home-made crypto protecting secrets |
 | **High** | Exploitable with authenticated input, or exposes sensitive data, or a core control is missing | Missing authorization on an endpoint; stack traces or exception details in HTTP responses; TLS 1.0/1.1 enabled; no HSTS; unauthenticated CBC data handed to clients; CVSS 7.0–8.9; PII or special-category data logged as payload; runtime past end of life |
 | **Medium** | Defense-in-depth gap or misconfiguration that needs another weakness to exploit | Missing security header; security analyzers not enabled; unreviewed SonarQube security issues; CVSS 4.0–6.9; verbose logging in production; no automated certificate renewal |
-| **Low** | Hygiene or informational; no realistic exploit path on its own | `SameSite` not explicit; HSTS `preload` absent; public identifiers shared across environments; post-quantum readiness; documentation gaps; CVSS below 4.0 |
+| **Low** | Hygiene or informational; no realistic exploit path on its own | `SameSite` not explicit; HSTS `preload` absent; public identifiers shared across environments; documentation gaps; CVSS below 4.0 |
 
 Status words such as SECURE / PARTIALLY SECURE / INSECURE, IMPLEMENTED / PARTIAL / NOT, or EXCESSIVE / MODERATE / MINIMAL are **not** severities; when a reference file uses them for an assessment, every reported finding still carries one of the four severities above.
 
@@ -189,7 +189,7 @@ Store the result as `HOSTING_MODEL` and do **not** ask again.
 
 1. **Read the check's reference file in full** before searching. The file states what to look for, what counts as a finding, the severity of each finding and the remediation; do not work from the check's one-line description.
 2. **Apply the audit context.** Follow the file's `Hosting model` line with `HOSTING_MODEL`, and use `PRODUCTION_URL` where the file calls for live inspection.
-3. **Search, then confirm.** Run the file's `Files to examine` globs and `Search patterns` first, then read every hit in context before rating it. A pattern match is a candidate, not a finding; the file's "not a finding" rules apply.
+3. **Search, then confirm.** Run the file's `Files to examine` globs and `Search patterns` first, then read every hit in context before rating it. A pattern match is a candidate, not a finding; the file's "not a finding" rules apply. Report security issues only: functional bugs (a wrong business rule, a typo in a non-security setting) and suggestions without a security weakness are not findings.
 4. **Rate and record** every confirmed finding in the format from the Severity Scale section: Severity · check number and name · location (`path:line`, header name, or URL) · what was found · remediation · OWASP Top 10:2025 category.
 5. **Collect human-input questions.** Where the file marks an item as "ask the user" or "requires human input", gather those questions and ask them in one batch at the end of the check, never one at a time in the middle of it.
 6. **Close the check with a result block**, even when nothing was found:
@@ -233,8 +233,7 @@ Do **not** create any Jira stories before receiving this answer.
 
 ### Step 4 — Create a Jira Story for Each Selected Finding
 
-> **Package Security — special consolidation rule:**
-> Instead of one story per package, consolidate all npm findings into a single story and all NuGet findings into a single story (at most 2 stories for this check). List every affected package, its current version, recommended version, CVE(s), and risk level in the description of the consolidated story. Apply the highest priority among the individual findings to the consolidated story. If a package ecosystem has no findings, omit its story entirely.
+> **Grouped findings:** findings that a reference file groups (one per package ecosystem in check 2, one per severity level in check 14, one for unused response fields in check 11) become one story each. List every grouped item, with its location and remediation, in the story description.
 
 Before the first story, call `getAccessibleAtlassianResources` once and store the returned cloud id as `CLOUD_ID`; every Jira call below requires it.
 

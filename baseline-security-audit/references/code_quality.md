@@ -111,7 +111,7 @@ Use the MCP tools when available: `get_project_quality_gate_status`, `get_compon
 **RED FLAGS:**
 - Security rating below A on Overall Code (rate each open Security issue per the mapping under What to Report)
 - Security Review rating below A (fewer than 80% of hotspots reviewed) on servers that still have hotspots (Medium)
-- Quality gate without a security condition (Security rating on New Code or Overall Code), or a pipeline that does not wait for the gate (Medium; `SonarQubePublish` with `pollingTimeoutSec: 0`, no `SonarQubePublish`/`SonarCloudPublish` task at all, or Sonar tasks with `continueOnError: true`). A publish task without an explicit `pollingTimeoutSec` is compliant: it polls for 300 seconds by default
+- Quality gate without a security condition (Security rating on New Code or Overall Code) (Medium). Running the analysis only in a scheduled nightly pipeline is compliant; the build and deploy pipeline does not have to wait for the gate
 
 ## 4. SonarQube — Code Quality (Technical Debt)
 
