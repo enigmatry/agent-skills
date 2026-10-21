@@ -118,7 +118,7 @@ options.UsePkce = false;
 ```
 **The default is implicit:** `OpenIdConnectOptions.ResponseType` defaults to `id_token`. An `AddOpenIdConnect(...)` registration that neither sets `ResponseType = OpenIdConnectResponseType.Code` (`"code"`) nor uses `AddMicrosoftIdentityWebApp` (code + PKCE by default) is a High finding even though no bad literal appears. Source: https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.authentication.openidconnect.openidconnectoptions.responsetype
 
-**JWT bearer validation for APIs (`AddJwtBearer` / `AddMicrosoftIdentityWebApi`):** `TokenValidationParameters.ValidateAudience` or `ValidateIssuer = false`, `RequireHttpsMetadata = false`, no `ValidAudience(s)`/`ValidIssuer(s)` (`Audience` missing from the `AzureAd` section), or no scope or role check (`[RequiredScope]`, `RequiredScopeOrAppPermission`, a policy on the `scp`/`roles` claim) so any token issued in the tenant is accepted = High.
+**JWT bearer validation for APIs (`AddJwtBearer` / `AddMicrosoftIdentityWebApi`):** `TokenValidationParameters.ValidateAudience` or `ValidateIssuer = false`, `RequireHttpsMetadata = false`, `AddJwtBearer` without `ValidAudience(s)`/`ValidIssuer(s)`, or no scope, app-role or application-permission check (`[RequiredScope]`, `RequiredScopeOrAppPermission`, a policy on the `scp`/`roles` claim, or a permission lookup in the application's own database) so any token issued in the tenant is accepted = High. `AddMicrosoftIdentityWebApi` validates the audience against `ClientId` and `api://{ClientId}` and the issuer against the tenant by default, so a missing `Audience` in the `AzureAd` section is not a finding there.
 
 **Frontend (Angular) — check OIDC client library configuration:**
 
@@ -253,6 +253,8 @@ builder.Services.AddAuthorizationBuilder()
 - Role strings used inconsistently within the code (e.g. `"Administrator"` in one place and `"Admin"` in another) — Medium; whether they match the identity provider is a section 6 question
 - Angular admin routes with no route guard, or a guard that is the only check — Low
 
+**Identity binding:** look up the application user by the immutable `oid` (with `tid`) or `sub` claim. Matching on `email`, `preferred_username`, `upn` or `emails` (mutable and not guaranteed verified; Microsoft advises against authorizing on them) = Medium. Search: `preferred_username|ClaimTypes.Email|"emails"|"upn"` in the current-user or claims provider.
+
 ## 6. Environment Policy Checks (Requires Human Input)
 
 The following settings cannot be verified from source code alone. Ask someone with access to the Acceptance and Production environments to confirm:
@@ -268,7 +270,8 @@ The following settings cannot be verified from source code alone. Ask someone wi
 >    - Minimum length **15 characters** for single-factor passwords, or **8 characters** when MFA is enforced; maximum length at least 64
 >    - **No** composition rules (mixed case, digits, symbols) and **no** periodic rotation; both are prohibited by NIST
 >    - Passwords screened against a breached/common-password blocklist
->    - In Microsoft Entra ID (cloud-only users the built-in policy is fixed): confirm Entra Password Protection (global and custom banned lists) is enabled and password expiry is disabled
+>    - Rate only what the identity provider lets you configure. Microsoft Entra ID fixes its password policy (8 to 256 characters, three of four character classes; length and complexity cannot be changed), so those deviations from NIST are not findings. Check what can be set: Entra Password Protection (global and custom banned lists) enabled and password expiry disabled
+>      Source: https://learn.microsoft.com/en-gb/entra/identity/authentication/concept-sspr-policy#microsoft-entra-password-policies
 >    - For local ASP.NET Core Identity accounts: `PasswordOptions.RequiredLength` ≥ 15 (or ≥ 8 with MFA), `RequireDigit`/`RequireUppercase`/`RequireNonAlphanumeric` = `false`, and a breached-password check (e.g. Pwned Passwords k-anonymity API)
 >
 > 3. **MFA** — Is MFA enforced for this application through a Conditional Access policy, preferably phishing-resistant (FIDO2/passkeys, Windows Hello for Business, certificate-based)?
@@ -281,5 +284,5 @@ The following settings cannot be verified from source code alone. Ask someone wi
 For each finding, provide:
 - **Location**: file and line number (for code findings) or environment/configuration name (for policy findings)
 - **Issue**: description of the problem
-- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow including an OIDC registration that leaves `ResponseType` at its `id_token` default, ROPC, bearer API with audience/issuer validation disabled or without a scope or role check, Swagger or OpenAPI reachable in any environment other than Development, unrestricted Identity `/register` endpoint in production, explicit `UsePkce = false`) / Medium (PKCE disabled in the Angular OIDC client, `requireHttps: false`, non-user accounts using secrets where workload identity federation, certificates or managed identity are possible, policies that only `RequireAuthenticatedUser()`) / Low (token lifetime slightly above threshold, password policy deviating from NIST, Angular guard missing or mismatched, `strictDiscoveryDocumentValidation: false`, `DefaultAzureCredential` in production code)
+- **Risk**: Critical (endpoint without any authorization that exposes data or actions; custom authentication that allows bypass) / High (no fallback policy with undecorated endpoints, admin or bulk endpoint with bare `[Authorize]`, implicit flow including an OIDC registration that leaves `ResponseType` at its `id_token` default, ROPC, bearer API with audience/issuer validation disabled or without a scope or role check, Swagger or OpenAPI reachable in any environment other than Development, unrestricted Identity `/register` endpoint in production, explicit `UsePkce = false`) / Medium (PKCE disabled in the Angular OIDC client, `requireHttps: false`, non-user accounts using secrets where workload identity federation, certificates or managed identity are possible, policies that only `RequireAuthenticatedUser()`, application user bound to a mutable claim instead of `oid`/`sub`) / Low (token lifetime slightly above threshold, password policy deviating from NIST in a setting the identity provider lets you configure, Angular guard missing or mismatched, `strictDiscoveryDocumentValidation: false`, `DefaultAzureCredential` in production code)
 - **Recommendation**: the specific configuration change or policy update required

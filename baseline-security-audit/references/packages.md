@@ -1,12 +1,12 @@
 # Package Security Analysis
 
-Scan the codebase for packages with known security vulnerabilities, deprecated packages, and significantly outdated dependencies that pose security, compatibility, or maintenance risks.
+Scan the codebase for packages with known security vulnerabilities, deprecated packages with security implications, end-of-life runtimes and supply-chain misconfiguration.
 
 > **Severity:** rate every finding Critical / High / Medium / Low per the Severity Scale in SKILL.md.
 > **OWASP Top 10:2025:** A03 Software Supply Chain Failures · **ASVS 5.0:** V15 Secure Coding and Architecture
 
 ## Core Security Principle
-**All third-party dependencies must be free of known security vulnerabilities. Vulnerable, deprecated, or significantly outdated packages must be updated or replaced.**
+**All third-party dependencies must be free of known security vulnerabilities. Vulnerable packages, and deprecated packages with security implications, must be updated or replaced.**
 
 ## 1. Package Management Systems Analysis
 **Check all package files:**
@@ -33,6 +33,8 @@ Scan the codebase for packages with known security vulnerabilities, deprecated p
 - Packages with no recent updates (>2 years)
 - Packages targeting end-of-life frameworks (.NET Framework versions, Node.js versions)
 - Packages with successor/replacement packages available or maintenance mode warnings
+
+Deprecated, unmaintained or outdated packages without a security implication are not findings.
 
 **Runtime end-of-life (verify against endoflife.date at audit time; status as of October 2026):**
 
@@ -124,7 +126,7 @@ Every `"resolved"` URL in `package-lock.json` (or `resolved` line in `yarn.lock`
 ## 6. Risk Assessment Criteria
 **Categorize findings by risk level:**
 
-Use the NVD CVSS severity bands as reported by the advisory; do not shift them up.
+Use the NVD CVSS severity bands as reported by the advisory; do not shift them up. **Development-only dependencies** (npm entries marked `"dev": true` in the lockfile that do not reach the production bundle, test projects, and local-only hosts such as an Aspire AppHost) are rated one level below their band, never below Low: the exposure is the build agent and developer machines, not the deployed application.
 
 **Critical (immediate action required):**
 - CVSS 9.0–10.0
@@ -140,8 +142,6 @@ Use the NVD CVSS severity bands as reported by the advisory; do not shift them u
 
 **Medium (plan for update):**
 - CVSS 4.0–6.9
-- Significantly outdated packages (>2 major versions behind)
-- Non-security deprecation warnings
 - NuGetAudit disabled or transitive audit off on net8.0/net9.0; a private-feed-only `nuget.config` without `<auditSources>`; npm lifecycle scripts not blocked (section 5)
 
 **Low (monitor):**
@@ -157,7 +157,8 @@ For each package in the grouped finding, list:
 - **Package name** and current version
 - **Latest available** version
 - **Risk level** (Critical/High/Medium/Low)
-- **Issue type** (Vulnerable/Deprecated/Outdated)
+- **Issue type** (Vulnerable/Deprecated with security implications/End-of-life runtime)
+- **Scope** (production or development-only)
 - **CVE numbers** or security advisory references
 - **Impact assessment** (what could be exploited)
 - **Update recommendation** (specific version to upgrade to)
