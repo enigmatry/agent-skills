@@ -42,7 +42,7 @@ On `linux` hosting `<requestFiltering>` is ignored; the equivalent is a method-f
 
 **GOOD configuration - Whitelist approach:**
 
-**Example: Only GET, POST, PUT, DELETE, OPTIONS are used:**
+**Example: Only GET, POST, PUT, DELETE, OPTIONS are used (HEAD follows GET):**
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
@@ -51,6 +51,7 @@ On `linux` hosting `<requestFiltering>` is ignored; the equivalent is a method-f
       <requestFiltering>
         <verbs allowUnlisted="false">
           <add verb="GET" allowed="true" />
+          <add verb="HEAD" allowed="true" />
           <add verb="POST" allowed="true" />
           <add verb="PUT" allowed="true" />
           <add verb="DELETE" allowed="true" />
@@ -64,7 +65,7 @@ On `linux` hosting `<requestFiltering>` is ignored; the equivalent is a method-f
 
 **Key configuration:**
 - `allowUnlisted="false"` - Critical! Blocks all verbs not explicitly allowed
-- Only list verbs that are actually used in controllers
+- Only list verbs that are actually used in controllers, plus HEAD whenever GET is listed
 
 ## 3. DEBUG Verb - Legacy Only
 
@@ -114,6 +115,7 @@ List every controller and endpoint file (section 7 search patterns) and consolid
 ```xml
 <verbs allowUnlisted="false">
   <add verb="GET" allowed="true" />      <!-- Used ✓ -->
+  <add verb="HEAD" allowed="true" />     <!-- Follows GET ✓ -->
   <add verb="POST" allowed="true" />     <!-- Used ✓ -->
   <add verb="PUT" allowed="true" />      <!-- Used ✓ -->
   <add verb="DELETE" allowed="true" />   <!-- Used ✓ -->

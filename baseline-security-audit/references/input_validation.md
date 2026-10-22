@@ -76,7 +76,7 @@ public IActionResult Update(UpdateUserDto dto)
 
 // [Bind] restricts form and query binding only, not [FromBody] JSON
 public IActionResult Update([Bind("Name,Email")] User user)
-// For APIs: a dedicated request DTO, or reject unknown members (.NET 8+)
+// For APIs: a dedicated request DTO. Rejecting unknown members (.NET 8+) is extra; it does not stop declared properties being set
 new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow }
 ```
 **Mass assignment / BOPLA (owned here):** in request-bound DTOs and entities (section 7 scope) flag settable `Id`, `OwnerId`, `UserId`, `TenantId`, `Role`/`Roles`, `IsAdmin`, `IsActive`/`IsApproved`, `Price`, `Balance`, `Discount`, `Status` that the caller must not set; `TryUpdateModelAsync(model)` without an include list; AutoMapper `CreateMap<Dto, Entity>()` or `ReverseMap()` that maps those members without `.Ignore()`. High when the field drives authorization, tenancy or money; Medium otherwise.
@@ -85,7 +85,7 @@ new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.
 
 **Unsafe deserialization:** Newtonsoft `TypeNameHandling` other than `None` on untrusted input = High; `BinaryFormatter` (removed in .NET 9) = High; System.Text.Json `MaxDepth` left at its default on large untrusted payloads = Low.
 
-**Path traversal (owned here):** `Path.Combine(root, userInput)` without `Path.GetFullPath` plus a `StartsWith(root)` check, `File.ReadAllText`/`FileStream` on a user-supplied path, `Directory.GetFiles` with user input. Reachable from user input = High.
+**Path traversal (owned here):** `Path.Combine(root, userInput)` without `Path.GetFullPath` plus a containment check at a directory boundary (`StartsWith` on the root ending in a directory separator, case-insensitive on Windows; a bare `StartsWith(root)` accepts sibling folders such as `uploads-private`), `File.ReadAllText`/`FileStream` on a user-supplied path, `Directory.GetFiles` with user input. Reachable from user input = High.
 
 **SSRF (OWASP 2025 folds it into A01):** server-side `HttpClient`/`WebRequest` calls with a user-supplied URL need a host allow-list, blocking of private and link-local ranges (`169.254.169.254` metadata endpoint) and no redirect following to arbitrary hosts (`AllowAutoRedirect`). User-controlled outbound URL without an allow-list = High.
 

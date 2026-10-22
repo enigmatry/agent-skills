@@ -41,7 +41,7 @@ Check for unsafe stored procedure invocation:
 Check for unsafe raw queries within ORMs:
 - Raw SQL passed to Entity Framework methods
 - Dynamic LINQ expressions built from user-supplied strings
-- `System.Linq.Dynamic.Core` string predicates built from user-supplied strings (e.g. `.Where("Name == \"" + input + "\"")`, `.OrderBy(sortExpression)`) and raw SQL inside `Where` (e.g. `EF.Functions.*` fed a concatenated string). Plain LINQ `Contains`/`StartsWith`/`EndsWith` on an `IQueryable` are parameterized by EF Core and are not findings. A user-supplied sort or filter string parsed by Dynamic LINQ (version 1.3.0 or later) into an EF Core expression is not a finding either, with or without an allow-list, because the generated SQL stays parameterized
+- `System.Linq.Dynamic.Core` string predicates built from user-supplied strings (e.g. `.Where("Name == \"" + input + "\"")`, `.OrderBy(sortExpression)`) and raw SQL inside `Where` (e.g. `EF.Functions.*` fed a concatenated string). Plain LINQ `Contains`/`StartsWith`/`EndsWith` on an `IQueryable` are parameterized by EF Core and are not findings. A user-supplied sort expression, or a predicate that passes user input as a Dynamic LINQ parameter (`.Where("Name == @0", input)`), parsed by Dynamic LINQ 1.3.0 or later is not a finding either, with or without an allow-list, because the generated SQL stays parameterized. User input concatenated into a predicate string stays a finding: it can change the expression logic (`|| true` widening a tenant filter)
 - HQL or native SQL queries (if applicable)
 
 ## 5. Input Sources to Validate

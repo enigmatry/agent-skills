@@ -213,7 +213,7 @@ For each finding, provide:
    curl -sSI -L "$PRODUCTION_URL" | grep -i '^set-cookie'
    curl -sSI -L "$PRODUCTION_URL/api/health" | grep -i '^set-cookie'
    ```
-   (PowerShell 7: `(Invoke-WebRequest -Uri $env:PRODUCTION_URL -Method Head -SkipHttpErrorCheck).Headers['Set-Cookie']`.) For every `Set-Cookie` line, diff the attributes present (`Secure`, `HttpOnly`, `SameSite`, `Path`, `Max-Age`/`Expires`, `Partitioned`) against the required settings in the section 1 table; report each gap with the severity from section 8. A cookie seen without `Secure` while the code sets `CookieSecurePolicy.Always` means `UseForwardedHeaders` is missing behind the edge.
+   (PowerShell 7: `(Invoke-WebRequest -Uri $env:PRODUCTION_URL -Method Head -SkipHttpErrorCheck).Headers['Set-Cookie']`.) For every `Set-Cookie` line, diff the attributes present (`Secure`, `HttpOnly`, `SameSite`, `Path`, `Max-Age`/`Expires`, `Partitioned`) against the required settings in the section 1 table; report each gap with the severity from section 8. A cookie seen without `Secure` while the code sets `CookieSecurePolicy.SameAsRequest` behind a TLS-terminating edge means `UseForwardedHeaders` is missing; with `Always` the `Secure` flag does not depend on the scheme, so look for another cookie writer, the deployed configuration or response rewriting.
 
 2. **DevTools Application tab checklist** (ask the user to open the app, sign in, and read the panel; nothing is executed in the page):
    - Cookies → per cookie, the `Secure`, `HttpOnly`, `SameSite` and `Partitioned` columns match the section 1 table

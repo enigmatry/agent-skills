@@ -199,7 +199,7 @@ app.Use(async (context, next) =>
 - `Cache-Control: no-store` on API responses (missing = Medium)
 - `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` is the minimal CSP for an API that renders no content; a permissive CSP (`default-src *`) on an API = Medium
 - `Permissions-Policy` with at least `camera=(), microphone=(), geolocation=(), payment=()` (a shorter list = Medium)
-- `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none` on front-end and API (each missing = Medium)
+- `Cross-Origin-Opener-Policy: same-origin` (`same-origin-allow-popups` where sign-in uses a popup, such as MSAL `loginPopup`), `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none` on front-end and API (each missing = Medium)
 - `Cross-Origin-Embedder-Policy: require-corp` only where the app tolerates it (it blocks cross-origin resources that lack CORP/CORS); otherwise not a finding
 - `Clear-Site-Data: "cache","cookies","storage"` on the logout response (check the sign-out action, not the global header block)
 
@@ -243,7 +243,7 @@ On `linux` hosting `web.config` is ignored: the equivalent is `AddServerHeader =
 </configuration>
 ```
 
-**ASP.NET Core / Kestrel:** `builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false)` in `Program.cs`, or `"Kestrel": { "AddServerHeader": false }` in `appsettings.json`.
+**ASP.NET Core / Kestrel:** `builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false)` in `Program.cs`. A `Kestrel:AddServerHeader` value in `appsettings.json` works only with an explicit `Configure<KestrelServerOptions>` binding.
 
 > **Do not accept middleware that calls `Response.Headers.Remove("Server")` as a remediation.** Kestrel adds its `Server` header when the response starts, after middleware has run, so only `AddServerHeader = false` removes it. Under IIS (in-process or out-of-process) the `Server` and `X-Powered-By` headers are added by IIS after the ASP.NET Core pipeline completes, so application code cannot remove them; only `removeServerHeader="true"` on `<requestFiltering>` and `<remove name="X-Powered-By" />` under `<httpProtocol><customHeaders>` in `web.config` work. Report such middleware as a non-working remediation.
 
