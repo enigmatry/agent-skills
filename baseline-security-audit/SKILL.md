@@ -215,7 +215,7 @@ All findings already carry one of the four severities from the Severity Scale se
 
 ### Step 3 — Present All Findings and Ask Which to Send to Jira
 
-After **all selected checks** are complete, output a numbered consolidated table of every finding. Each check covers a distinct topic, so a configuration is reported under exactly one check; if the same file and line surfaces twice, keep the finding under the check whose topic it is and drop the other:
+After **all selected checks** are complete, output a numbered consolidated table of every finding. Each check covers a distinct topic, so a configuration is reported under exactly one check; if the same underlying issue surfaces under two checks, keep it under the check whose topic it is and drop the other. Distinct issues on the same line stay separate findings:
 
 | # | Check | Finding | Location | Severity | OWASP 2025 |
 |---|-------|---------|----------|----------|------------|

@@ -199,7 +199,7 @@ app.Use(async (context, next) =>
 - `Cache-Control: no-store` on API responses (missing = Medium)
 - `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` is the minimal CSP for an API that renders no content; a permissive CSP (`default-src *`) on an API = Medium
 - `Permissions-Policy` with at least `camera=(), microphone=(), geolocation=(), payment=()` (a shorter list = Medium)
-- `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none` on front-end and API (each missing = Medium)
+- `Cross-Origin-Opener-Policy: same-origin` (`same-origin-allow-popups` where sign-in uses a popup, such as MSAL `loginPopup`; no COOP at all on the MSAL Browser v5 redirect bridge route, which must be served without it), `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none` on front-end and API (each missing = Medium)
 - `Cross-Origin-Embedder-Policy: require-corp` only where the app tolerates it (it blocks cross-origin resources that lack CORP/CORS); otherwise not a finding
 - `Clear-Site-Data: "cache","cookies","storage"` on the logout response (check the sign-out action, not the global header block)
 
@@ -243,7 +243,7 @@ On `linux` hosting `web.config` is ignored: the equivalent is `AddServerHeader =
 </configuration>
 ```
 
-**ASP.NET Core / Kestrel:** `builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false)` in `Program.cs`, or `"Kestrel": { "AddServerHeader": false }` in `appsettings.json`.
+**ASP.NET Core / Kestrel:** `builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false)` in `Program.cs`. A `Kestrel:AddServerHeader` value in `appsettings.json` works only with an explicit `Configure<KestrelServerOptions>` binding.
 
 > **Do not accept middleware that calls `Response.Headers.Remove("Server")` as a remediation.** Kestrel adds its `Server` header when the response starts, after middleware has run, so only `AddServerHeader = false` removes it. Under IIS (in-process or out-of-process) the `Server` and `X-Powered-By` headers are added by IIS after the ASP.NET Core pipeline completes, so application code cannot remove them; only `removeServerHeader="true"` on `<requestFiltering>` and `<remove name="X-Powered-By" />` under `<httpProtocol><customHeaders>` in `web.config` work. Report such middleware as a non-working remediation.
 
@@ -258,7 +258,7 @@ Group header findings per severity: report **one** finding per severity level th
 | `Content-Security-Policy` missing (a `Content-Security-Policy-Report-Only` header alone does not count as present) | High |
 | `Strict-Transport-Security` missing, `max-age` below one year, or `includeSubDomains` absent | High |
 | CSP present but weak (`unsafe-inline` / `unsafe-eval` / `data:` / `blob:` in `script-src`, `default-src *`, missing `base-uri`, missing `frame-ancestors`, `object-src 'none'` or `upgrade-insecure-requests` absent, static `'nonce-...'` string in `web.config`) | Medium |
-| `X-Content-Type-Options`, `Permissions-Policy` (or without the minimum feature list), `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy`, `X-Permitted-Cross-Domain-Policies` missing; `Clear-Site-Data` absent on logout; `Cross-Origin-Embedder-Policy` absent where the app tolerates it | Medium |
+| `X-Content-Type-Options`, `Permissions-Policy` (or without the minimum feature list), `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy`, `X-Permitted-Cross-Domain-Policies` missing; `Clear-Site-Data` absent on logout; `Cross-Origin-Embedder-Policy` absent where the app tolerates it (COOP absent on the MSAL Browser v5 redirect bridge route is not a finding) | Medium |
 | `style-src 'unsafe-inline'` on an Angular app (runtime component styles; see section 3) | Low |
 | `Referrer-Policy` set to `unsafe-url` or `no-referrer-when-downgrade` | Medium |
 | `Cache-Control: no-store` missing on API responses; CDN resource without SRI; CORS `*` combined with credentials | Medium |

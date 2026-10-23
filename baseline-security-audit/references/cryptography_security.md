@@ -149,7 +149,7 @@ aes.GenerateKey();
 
 **Severity:** a hard-coded or static key in source or configuration (`appsettings*.json`, Bicep parameters, pipeline variables) = Critical; a key that comes from a vault or Data Protection but has no documented rotation = Low; `ProtectKeysWithAzureKeyVault` without `PersistKeysTo*` on multi-instance App Service or containers = Medium.
 
-**JWT signing (`AddJwtBearer`, `JwtSecurityTokenHandler`, `JsonWebTokenHandler`):** `alg: none` accepted (`RequireSignedTokens = false`, `ValidateIssuerSigningKey = false`), HS256 with a symmetric key shorter than 256 bits or a password-like `Jwt:Key` string, `new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]))` = High (a key committed in config is also check 1 (secrets.md)). `IdentityModelEventSource.ShowPII = true` outside Development = Medium; the search pattern is owned by check 5 (logging.md) section 5.
+**JWT signing (`AddJwtBearer`, `JwtSecurityTokenHandler`, `JsonWebTokenHandler`):** `alg: none` accepted (`RequireSignedTokens = false`; `ValidateIssuerSigningKey = false` alone does not allow unsigned tokens), HS256 with a symmetric key shorter than 256 bits or a password-like `Jwt:Key` string, `new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]))` = High (a key committed in config is also check 1 (secrets.md)). `IdentityModelEventSource.ShowPII = true` outside Development = Medium; the search pattern is owned by check 5 (logging.md) section 5.
 
 ## 6. Angular Client-Side Cryptography
 
